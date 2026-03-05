@@ -1,0 +1,1483 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+
+// ── CONSTANTS
+const SKILL_LEVELS = ["2.0","2.5","3.0","3.5","3.5+"];
+const SKILL_ELO    = {"2.0":1050,"2.5":1160,"3.0":1290,"3.5":1420,"3.5+":1570};
+const SKILL_COLOR  = {"2.0":"#94a3b8","2.5":"#60a5fa","3.0":"#34d399","3.5":"#f59e0b","3.5+":"#f43f5e"};
+const SKILL_DESC   = {"2.0":"Mới bắt đầu","2.5":"Cơ bản","3.0":"Trung bình","3.5":"Khá tốt","3.5+":"Nâng cao"};
+const DTYPE_OPT = [
+  {val:"mixed", label:"⚥ Nam-Nữ",  desc:"1 nam+1 nữ", color:"#a78bfa"},
+  {val:"male",  label:"♂ Đôi Nam", desc:"Toàn nam",   color:"#60a5fa"},
+  {val:"female",label:"♀ Đôi Nữ", desc:"Toàn nữ",    color:"#f472b6"},
+  {val:"any",   label:"⭐ Mix",    desc:"Bất kỳ",     color:"#00c9a7"},
+];
+const SKEY_META    = "pb_v5_meta";     // accounts + events list
+const SKEY_PLAYERS = "pb_v5_players";  // all players (global)
+const SKEY_EVENT   = (id) => `pb_v5_event_${id}`; // per-event data
+const SKEY_ACTIVE  = "pb_v5_active";   // active event id + courts + queue
+const NCOURTS = 5;
+const ROLES = {SA:"super_admin", HOST:"host", VIEWER:"viewer"};
+
+// ── UTILS
+const uid      = () => Math.random().toString(36).slice(2,9).toUpperCase();
+const rng      = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const nowStr   = () => new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
+const todayStr = () => new Date().toLocaleDateString("vi-VN",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
+const teamElo  = t => t?.length ? Math.round(t.reduce((s,p)=>s+(p?.elo||0),0)/t.length) : 0;
+const skillElo = s => (SKILL_ELO[s]||1200)+rng(-50,50);
+const safe     = v => (v&&typeof v==="string") ? v : "";
+const genCode  = () => Math.random().toString(36).slice(2,8).toUpperCase();
+
+// ── STORAGE ENGINE — lưu ngay lập tức từng phần riêng biệt
+const DB = {
+  async get(key, shared=true) {
+    try { const r = await window.storage.get(key, shared); return r ? JSON.parse(r.value) : null; }
+    catch { return null; }
+  },
+  async set(key, val, shared=true) {
+    try { await window.storage.set(key, JSON.stringify(val), shared); return true; }
+    catch { return false; }
+  },
+  async del(key, shared=true) {
+    try { await window.storage.delete(key, shared); } catch {}
+  }
+};
+
+// ── KOOTORO
+function kootoro(player, history) {
+  if(!player||!history) return 0;
+  let k=0;
+  history.forEach(h=>{
+    if(!h?.team1||!h?.team2) return;
+    const in1=h.team1.some(p=>p?.id===player.id), in2=h.team2.some(p=>p?.id===player.id);
+    if(!in1&&!in2) return;
+    const won=(in1&&h.winner===1)||(in2&&h.winner===2);
+    const my=(in1?h.team1:h.team2).filter(Boolean), opp=(in1?h.team2:h.team1).filter(Boolean);
+    const diff=teamElo(opp)-teamElo(my), margin=Math.abs((h.scoreWinner||11)-(h.scoreLoser||0));
+    let pts=won?10:-3; pts+=(diff/100)*(won?4:-2); pts+=won?Math.min(margin*0.5,4):-(margin*0.2);
+    k+=pts;
+  });
+  return Math.round(k*10)/10;
+}
+
+// ── SCORE
+const validScore = (a,b) => { if(isNaN(a)||isNaN(b)||a<0||b<0||a===b) return false; const w=Math.max(a,b),l=Math.min(a,b); return l<10?w===11:w-l===2; };
+const winner = (a,b) => validScore(a,b)?(a>b?1:2):null;
+
+// ── MATCH GEN
+function genMatch(pool, history, dtype) {
+  let cands=[...pool].filter(p=>p?.id&&p?.name);
+  if(dtype==="male") cands=cands.filter(p=>p.gender==="M");
+  else if(dtype==="female") cands=cands.filter(p=>p.gender==="F");
+  if(cands.length<4) return null;
+  const pri=p=>history.filter(h=>h?.team1&&h?.team2&&[...h.team1,...h.team2].some(x=>x?.id===p.id)).length+(p.gamesPlayed||0)*0.5;
+  const top=[...cands].sort((a,b)=>pri(a)-pri(b)).slice(0,Math.min(cands.length,20));
+  let best=null, bs=Infinity;
+  for(let i=0;i<800;i++){
+    const sh=[...top].sort(()=>Math.random()-0.5), [a,b,c,d]=sh;
+    if(!a||!b||!c||!d) continue;
+    if(dtype==="male"&&[a,b,c,d].some(x=>x.gender!=="M")) continue;
+    if(dtype==="female"&&[a,b,c,d].some(x=>x.gender!=="F")) continue;
+    if(dtype==="mixed"&&!(a.gender!==b.gender&&c.gender!==d.gender)) continue;
+    const rep=(a.lastPartners?.includes(b.id)?280:0)+(c.lastPartners?.includes(d.id)?280:0);
+    const diff=Math.abs(teamElo([a,b])-teamElo([c,d]));
+    const sc=rep+(diff>40?diff*2.5:diff*0.4)+(pri(a)+pri(b)+pri(c)+pri(d))*1.2;
+    if(sc<bs){bs=sc;best={team1:[a,b],team2:[c,d],diff:Math.round(diff),dtype};}
+  }
+  return best;
+}
+
+// ── SEED DATA
+const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An","Nhật Hào","Khánh Duy","Gia Bảo","Tuấn Anh","Đức Huy"];
+const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu","Tú Uyên","Diễm My","Cẩm Tú","Ánh Tuyết","Ngọc Hân"];
+function buildSeed(dbPlayers){
+  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
+  let mi=0,fi=0;
+  const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr()});
+  const list=[
+    mk("M","3.5+",true,"any"),mk("M","3.5+",true,"mixed"),mk("M","3.5",true,"any"),mk("F","3.5",true,"mixed"),mk("M","3.5",true,"male"),mk("F","3.5",true,"female"),mk("M","3.5",true,"mixed"),mk("F","3.5",false,"any"),mk("M","3.5",true,"any"),
+    mk("F","3.0",true,"mixed"),mk("M","3.0",true,"any"),mk("F","3.0",true,"any"),mk("M","3.0",true,"male"),mk("F","3.0",false,"mixed"),mk("M","3.0",true,"any"),mk("F","3.0",true,"female"),mk("M","3.0",false,"any"),mk("F","3.0",true,"any"),mk("M","3.0",true,"mixed"),
+    mk("M","2.5",true,"mixed"),mk("F","2.5",true,"any"),mk("M","2.5",true,"any"),mk("F","2.5",true,"mixed"),mk("M","2.5",false,"male"),mk("F","2.5",true,"any"),mk("M","2.5",true,"any"),mk("F","2.5",true,"female"),
+    mk("M","2.0",false,"any"),mk("F","2.0",true,"mixed"),mk("M","2.0",false,"male"),mk("F","2.0",false,"any"),mk("M","2.0",true,"any"),mk("F","2.0",false,"female"),
+    mk("M","3.0",true,"any"),mk("F","3.5",true,"mixed"),mk("M","2.5",true,"any"),mk("F","2.5",true,"mixed"),mk("M","3.5",true,"mixed"),mk("F","3.0",true,"any"),
+  ];
+  [[list[0].id,list[3].id,"couple"],[list[8].id,list[9].id,"spouse"],[list[20].id,list[21].id,"couple"]].forEach(([id1,id2,ct])=>{
+    const cid=`${ct}-${uid()}`,p1=list.find(p=>p.id===id1),p2=list.find(p=>p.id===id2);
+    if(p1){p1.coupleId=cid;p1.coupleType=ct;}if(p2){p2.coupleId=cid;p2.coupleType=ct;}
+  });
+  return list.map(p=>({...p,wins:Math.round(p.gamesPlayed*rng(35,65)/100)}));
+}
+const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:genCode()});
+
+// ── DESIGN TOKENS
+const G={bg:"#060c18",panel:"#0b1524",card:"#0f1e33",border:"#172840",accent:"#00c9a7",blue:"#3b82f6",gold:"#f59e0b",red:"#f43f5e",purple:"#a78bfa",pink:"#f472b6",text:"#dde6f5",muted:"#4a6480",dim:"#223044"};
+const iS={background:G.card,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.text,fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"};
+const bP={padding:"8px 14px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12};
+const bS={padding:"6px 11px",borderRadius:8,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontWeight:600,cursor:"pointer",fontSize:11};
+const bR={padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10};
+
+// ── ATOMS
+const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
+const GBadge=({gender})=>{const c=gender==="M"?"#60a5fa":"#f472b6";return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"20",color:c,fontWeight:700}}>{gender==="M"?"♂":"♀"}</span>;};
+const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:o.color+"20",color:o.color,fontWeight:600}}>{o.label}</span>;};
+const CBadge=({type})=><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:G.pink+"25",color:G.pink,fontWeight:700}}>{type==="spouse"?"💍":"💑"}</span>;
+const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?9:10,padding:sm?"1px 5px":"2px 8px",borderRadius:3,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:700}}>{label}</span>;};
+const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f59e0b"},[ROLES.HOST]:{l:"🎮 Host",c:"#a78bfa"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#4a6480"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:r.c+"20",color:r.c,fontWeight:700,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
+const SaveDot=({saving})=><span title={saving?"Đang lưu...":"Đã lưu"} style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:saving?"#f59e0b":"#00c9a7",boxShadow:saving?"0 0 6px #f59e0b88":"0 0 6px #00c9a744",transition:"background .4s"}}></span>;
+
+function Toast({msg,type,onClose}){
+  useEffect(()=>{const t=setTimeout(onClose,3400);return()=>clearTimeout(t);},[]);
+  const c=type==="error"?G.red:type==="warn"?G.gold:G.accent;
+  return <div style={{position:"fixed",top:12,right:12,zIndex:9999,background:G.panel,border:`1px solid ${c}`,borderRadius:10,padding:"9px 14px",color:c,fontSize:12,fontWeight:600,maxWidth:360,boxShadow:"0 8px 32px #000d",animation:"tIn .22s ease",display:"flex",alignItems:"center",gap:8}}>
+    <span>{msg}</span><button onClick={onClose} style={{background:"none",border:"none",color:c,cursor:"pointer",fontSize:13}}>✕</button>
+  </div>;
+}
+const Overlay=({children,onClose})=><div onClick={e=>{if(e.target===e.currentTarget)onClose&&onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>{children}</div>;
+const MBox=({title,sub,onClose,children,w=440})=><Overlay onClose={onClose}><div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:24,width:w,maxWidth:"96vw",maxHeight:"92vh",overflowY:"auto"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+    <div><div style={{fontSize:16,fontWeight:800,color:G.text}}>{title}</div>{sub&&<div style={{fontSize:10,color:G.muted,marginTop:2}}>{sub}</div>}</div>
+    <button onClick={onClose} style={{...bS,padding:"3px 8px",fontSize:14}}>✕</button>
+  </div>{children}</div></Overlay>;
+const Fld=({label,children,hint})=><div style={{marginBottom:13}}><div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:.8,marginBottom:5}}>{label}</div>{children}{hint&&<div style={{fontSize:9,color:G.dim,marginTop:4}}>{hint}</div>}</div>;
+
+// ══════════════════════════════════════
+// EVENT MODAL — tạo / đổi tên event
+// ══════════════════════════════════════
+function EventModal({event, onSave, onClose, isNew}){
+  const [name, setName] = useState(event?.name||"");
+  const [loc,  setLoc]  = useState(event?.location||"");
+  const [note, setNote] = useState(event?.note||"");
+  const save = () => {
+    if(!name.trim()){return;}
+    onSave({...event, name:name.trim(), location:loc.trim(), note:note.trim(),
+      date: event?.date || todayStr(),
+      id: event?.id || `ev_${uid()}`,
+      createdAt: event?.createdAt || new Date().toISOString(),
+    });
+    onClose();
+  };
+  return <MBox title={isNew?"🗓️ Tạo Event mới":"✏️ Sửa Event"} onClose={onClose} w={420}>
+    <Fld label="TÊN EVENT *">
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="VD: Sân Thủ Đức Thứ 7..." style={iS} autoFocus onKeyDown={e=>e.key==="Enter"&&save()}/>
+    </Fld>
+    <Fld label="ĐỊA ĐIỂM">
+      <input value={loc} onChange={e=>setLoc(e.target.value)} placeholder="VD: Sân Olympia Thủ Đức..." style={iS}/>
+    </Fld>
+    <Fld label="GHI CHÚ">
+      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Phí sân, nước uống..." style={iS}/>
+    </Fld>
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={save} disabled={!name.trim()} style={{...bP,flex:1,opacity:name.trim()?1:.4}}>
+        {isNew?"✅ Tạo Event":"💾 Lưu"}
+      </button>
+      <button onClick={onClose} style={bS}>Huỷ</button>
+    </div>
+  </MBox>;
+}
+
+// ══════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════
+function Login({accounts,onLogin,loading}){
+  const [mode,setMode]=useState("choose");
+  const [user,setUser]=useState(""),[pass,setPass]=useState(""),[code,setCode]=useState(""),[err,setErr]=useState("");
+  const tryAdmin=()=>{
+    const all=[...(accounts?.admins||[]),...(accounts?.hosts||[])];
+    const u=all.find(u=>safe(u.name).toLowerCase()===safe(user).toLowerCase().trim()&&u.password===pass);
+    u?onLogin(u):setErr("Tên hoặc mật khẩu không đúng");
+  };
+  const tryViewer=()=>{
+    safe(code).trim().toUpperCase()===(accounts?.viewerCode||"").toUpperCase()
+      ?onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""})
+      :setErr("Mã truy cập không đúng");
+  };
+  if(loading) return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted,fontSize:14}}>Đang tải... ⏳</div>;
+  return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{width:420,maxWidth:"100%"}}>
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{width:64,height:64,borderRadius:18,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 12px"}}>🏓</div>
+        <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:2}}>PICKLEBALL SOCIAL</div>
+        <div style={{fontSize:11,color:G.muted,marginTop:4,letterSpacing:1.5}}>KOOTORO RATING SYSTEM</div>
+      </div>
+      {mode==="choose"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <button onClick={()=>{setMode("admin");setErr("");}} style={{...bP,padding:"16px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}><span>🎮</span> Đăng nhập Admin / Host</button>
+        <button onClick={()=>{setMode("viewer");setErr("");}} style={{...bS,padding:"16px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10,border:`1px solid ${G.gold}55`,color:G.gold}}><span>👁</span> Xem điểm & Bảng xếp hạng</button>
+        <div style={{textAlign:"center",padding:"10px",borderRadius:8,background:G.panel,border:`1px solid ${G.border}`,fontSize:10,color:G.dim}}>💡 Khán giả dùng mã truy cập do Host cung cấp</div>
+      </div>}
+      {mode==="admin"&&<div style={{background:G.panel,borderRadius:16,padding:24,border:`1px solid ${G.border}`}}>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:16}}>🎮 Đăng nhập quản trị</div>
+        <Fld label="TÊN ĐĂNG NHẬP"><input value={user} onChange={e=>{setUser(e.target.value);setErr("");}} placeholder="Super Admin..." style={iS} onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></Fld>
+        <Fld label="MẬT KHẨU"><input type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("");}} placeholder="Mật khẩu..." style={iS} onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></Fld>
+        {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,background:G.red+"12"}}>{err}</div>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={tryAdmin} style={{...bP,flex:1,padding:"11px 0"}}>Đăng nhập ▶</button>
+          <button onClick={()=>{setMode("choose");setErr("");}} style={bS}>← Quay lại</button>
+        </div>
+        <div style={{marginTop:12,padding:"8px 12px",borderRadius:8,background:G.card,fontSize:10,color:G.dim}}>Mặc định: <span style={{color:G.accent}}>Super Admin</span> / <span style={{color:G.accent}}>admin2024</span></div>
+      </div>}
+      {mode==="viewer"&&<div style={{background:G.panel,borderRadius:16,padding:24,border:`1px solid ${G.gold}33`}}>
+        <div style={{fontSize:14,fontWeight:800,color:G.gold,marginBottom:16}}>👁 Xem trực tiếp</div>
+        <Fld label="MÃ TRUY CẬP">
+          <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr("");}} placeholder="VD: AB12CD" maxLength={8}
+            style={{...iS,textAlign:"center",fontSize:24,fontWeight:900,letterSpacing:8,color:G.gold}} onKeyDown={e=>e.key==="Enter"&&tryViewer()}/>
+        </Fld>
+        {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,background:G.red+"12"}}>{err}</div>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={tryViewer} style={{...bP,flex:1,padding:"11px 0",background:`linear-gradient(135deg,${G.gold},${G.red})`}}>Vào xem 👁</button>
+          <button onClick={()=>{setMode("choose");setErr("");}} style={bS}>← Quay lại</button>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// ADMIN MODAL
+// ══════════════════════════════════════
+function AdminModal({accounts,setAccounts,me,onClose,toast}){
+  const [tab,setTab]=useState("hosts");
+  const [nm,setNm]=useState(""),[pw,setPw]=useState(""),[err,setErr]=useState("");
+  const isSA=me?.role===ROLES.SA;
+  const addHost=()=>{
+    if(!nm.trim()){setErr("Nhập tên");return;}if(!pw.trim()){setErr("Nhập mật khẩu");return;}
+    if([...(accounts.admins||[]),...(accounts.hosts||[])].some(u=>u.name.toLowerCase()===nm.trim().toLowerCase())){setErr("Tên đã tồn tại");return;}
+    setAccounts(p=>({...p,hosts:[...(p.hosts||[]),{id:`h_${uid()}`,name:nm.trim(),role:ROLES.HOST,password:pw.trim()}]}));
+    setNm("");setPw("");setErr("");toast(`Host "${nm.trim()}" đã thêm 🎮`);
+  };
+  const delHost=id=>{setAccounts(p=>({...p,hosts:(p.hosts||[]).filter(h=>h.id!==id)}));toast("Đã xoá host");};
+  const regenCode=()=>{const c=genCode();setAccounts(p=>({...p,viewerCode:c}));toast(`Mã viewer mới: ${c} 🔄`);};
+  return <MBox title="⚙️ Quản lý tài khoản" sub="Phân quyền & Mã truy cập Viewer" onClose={onClose} w={560}>
+    <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:`1px solid ${G.border}`,paddingBottom:8}}>
+      {["hosts","viewer","pass"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===t?G.accent+"22":"transparent",color:tab===t?G.accent:G.muted,borderBottom:tab===t?`2px solid ${G.accent}`:"2px solid transparent"}}>
+        {t==="hosts"?"🎮 Hosts":t==="viewer"?"👁 Viewer Code":"🔐 Mật khẩu"}
+      </button>)}
+    </div>
+    {tab==="hosts"&&<>
+      <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:16}}>
+        {(accounts.admins||[]).map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",borderRadius:9,background:G.gold+"10",border:`1px solid ${G.gold}33`}}>
+          <span>👑</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:800,color:G.gold}}>{a.name}</div></div><RBadge role={a.role}/>
+        </div>)}
+        {(accounts.hosts||[]).map(h=><div key={h.id} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",borderRadius:9,background:G.panel,border:`1px solid ${G.border}`}}>
+          <span>🎮</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:G.text}}>{h.name}</div></div><RBadge role={h.role}/>
+          {isSA&&<button onClick={()=>delHost(h.id)} style={bR}>Xoá</button>}
+        </div>)}
+      </div>
+      {isSA&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:8}}>THÊM HOST</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+          <input value={nm} onChange={e=>{setNm(e.target.value);setErr("");}} placeholder="Tên host..." style={iS}/>
+          <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} placeholder="Mật khẩu..." style={iS}/>
+        </div>
+        {err&&<div style={{color:G.red,fontSize:11,marginBottom:8}}>{err}</div>}
+        <button onClick={addHost} style={{...bP,width:"100%"}}>➕ Thêm Host</button>
+      </>}
+    </>}
+    {tab==="viewer"&&<>
+      <div style={{textAlign:"center",padding:"20px 0"}}>
+        <div style={{fontSize:11,color:G.muted,marginBottom:12}}>Chia sẻ mã này cho khán giả</div>
+        <div style={{fontSize:44,fontWeight:900,letterSpacing:10,color:G.gold,padding:"16px 24px",borderRadius:14,background:G.gold+"12",border:`2px solid ${G.gold}44`,display:"inline-block",marginBottom:16}}>{accounts?.viewerCode||"??????"}</div>
+        {isSA&&<div><button onClick={regenCode} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>🔄 Tạo mã mới</button></div>}
+      </div>
+    </>}
+    {tab==="pass"&&<ChgPass me={me} accounts={accounts} setAccounts={setAccounts} toast={toast}/>}
+  </MBox>;
+}
+function ChgPass({me,accounts,setAccounts,toast}){
+  const [o,setO]=useState(""),[n,setN]=useState(""),[c2,setC2]=useState(""),[err,setErr]=useState("");
+  const go=()=>{
+    if(me.password!==o){setErr("Mật khẩu cũ không đúng");return;}
+    if(n.length<4){setErr("Tối thiểu 4 ký tự");return;}
+    if(n!==c2){setErr("Xác nhận không khớp");return;}
+    setAccounts(p=>({...p,admins:(p.admins||[]).map(a=>a.id===me.id?{...a,password:n}:a),hosts:(p.hosts||[]).map(h=>h.id===me.id?{...h,password:n}:h)}));
+    setO("");setN("");setC2("");setErr("");toast("Đã đổi mật khẩu 🔐");
+  };
+  return <>
+    <Fld label="MẬT KHẨU HIỆN TẠI"><input type="password" value={o} onChange={e=>{setO(e.target.value);setErr("");}} style={iS}/></Fld>
+    <Fld label="MẬT KHẨU MỚI"><input type="password" value={n} onChange={e=>{setN(e.target.value);setErr("");}} style={iS}/></Fld>
+    <Fld label="XÁC NHẬN"><input type="password" value={c2} onChange={e=>{setC2(e.target.value);setErr("");}} style={iS} onKeyDown={e=>e.key==="Enter"&&go()}/></Fld>
+    {err&&<div style={{color:G.red,fontSize:11,marginBottom:10}}>{err}</div>}
+    <button onClick={go} style={{...bP,width:"100%"}}>🔐 Đổi mật khẩu</button>
+  </>;
+}
+
+// ══════════════════════════════════════
+// SCORE MODAL
+// ══════════════════════════════════════
+function ScoreModal({match,onConfirm,onClose}){
+  const [s1,setS1]=useState(""),[s2,setS2]=useState("");
+  const n1=parseInt(s1)||0,n2=parseInt(s2)||0;
+  const ok=s1!==""&&s2!==""&&validScore(n1,n2),wi=ok?winner(n1,n2):null,deuced=n1>=10&&n2>=10;
+  const hint=()=>{if(!s1||!s2)return"Nhập tỉ số";if(n1===n2)return"Không thể bằng điểm";if(!deuced){const w=Math.max(n1,n2);if(w<11)return"Cần đến 11 điểm";if(w>11)return"Không quá 11 khi chưa deuce";}else{const d=Math.abs(n1-n2);if(d<2)return"Deuce: dẫn 2 điểm";if(d>2)return"Dẫn đúng 2 là thắng";}return ok?`✅ Đội ${wi===1?"A":"B"} thắng!`:"Không hợp lệ";};
+  const t1n=(match?.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join(" & ")||"A";
+  const t2n=(match?.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join(" & ")||"B";
+  return <MBox title="📊 Nhập tỉ số" sub="11 điểm thắng · Deuce 10-10: dẫn 2" onClose={onClose} w={380}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,alignItems:"center",marginBottom:14}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:11,color:G.accent,fontWeight:700,marginBottom:5}}>{t1n}</div>
+        <input type="number" min="0" max="99" value={s1} onChange={e=>setS1(e.target.value)} placeholder="0" style={{...iS,fontSize:30,fontWeight:900,textAlign:"center",padding:"10px 6px",color:ok&&wi===1?G.accent:G.text,border:`2px solid ${ok&&wi===1?G.accent:G.border}`}}/>
+      </div>
+      <div style={{fontSize:16,fontWeight:800,color:G.dim,marginTop:14,textAlign:"center"}}>:</div>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:5}}>{t2n}</div>
+        <input type="number" min="0" max="99" value={s2} onChange={e=>setS2(e.target.value)} placeholder="0" style={{...iS,fontSize:30,fontWeight:900,textAlign:"center",padding:"10px 6px",color:ok&&wi===2?G.gold:G.text,border:`2px solid ${ok&&wi===2?G.gold:G.border}`}}/>
+      </div>
+    </div>
+    {deuced&&<div style={{textAlign:"center",padding:"5px",borderRadius:7,background:G.purple+"18",color:G.purple,fontSize:11,fontWeight:700,marginBottom:10}}>🔥 DEUCE</div>}
+    <div style={{textAlign:"center",padding:"7px",borderRadius:7,background:ok?G.accent+"12":G.card,border:`1px solid ${ok?G.accent+"44":G.border}`,color:ok?G.accent:G.muted,fontSize:11,marginBottom:12}}>{hint()}</div>
+    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+      {[[11,0],[11,5],[11,7],[11,9],[12,10],[13,11]].map(([w,l])=>(
+        <button key={`${w}-${l}`} onClick={()=>{setS1(String(w));setS2(String(l));}} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${s1===String(w)&&s2===String(l)?G.accent:G.border}`,background:s1===String(w)&&s2===String(l)?G.accent+"22":"transparent",color:s1===String(w)&&s2===String(l)?G.accent:G.muted,cursor:"pointer",fontSize:10,fontWeight:600}}>{w}-{l}</button>
+      ))}
+    </div>
+    <div style={{display:"flex",gap:7}}>
+      <button onClick={()=>{if(!ok)return;const sw=wi===1?n1:n2,sl=wi===1?n2:n1;onConfirm(wi,sw,sl);}} disabled={!ok} style={{...bP,flex:1,padding:"10px 0",opacity:ok?1:.4}}>✅ Xác nhận</button>
+      <button onClick={onClose} style={{...bS,padding:"10px 12px"}}>Huỷ</button>
+    </div>
+  </MBox>;
+}
+
+// ══════════════════════════════════════
+// QR MODAL
+// ══════════════════════════════════════
+function QRModal({players,onRegister,onClose}){
+  const [step,setStep]=useState("scan"),[sname,setSname]=useState("");
+  const [form,setForm]=useState({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});
+  const [err,setErr]=useState(""),[added,setAdded]=useState(null),[search,setSearch]=useState("");
+  const sq=safe(search).toLowerCase();
+  const filtered=players.filter(p=>p&&p.name&&safe(p.name).toLowerCase().includes(sq));
+  const checkedIn=players.filter(p=>p&&p.checkedIn&&p.name);
+  const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const simulate=()=>{
+    const ni=players.filter(p=>p&&!p.checkedIn&&p.name);
+    if(ni.length>0&&Math.random()>0.3){const p=ni[rng(0,ni.length-1)];setForm({name:p.name,gender:p.gender,skill:p.skill,dtype:p.dtype||"any",cwith:"",ctype:"couple"});setSname(p.name);setStep("form");}
+    else{setSname("");setForm({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});setStep("form");}
+  };
+  const submit=()=>{
+    if(!safe(form.name).trim()){setErr("Nhập tên");return;}setErr("");
+    const ex=players.find(p=>p&&safe(p.name).toLowerCase()===safe(form.name).toLowerCase().trim());
+    if(ex){const cid=form.cwith?(ex.coupleId||`couple-${uid()}`):ex.coupleId;onRegister({...ex,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,coupleId:form.cwith?cid:ex.coupleId,coupleType:form.cwith?form.ctype:ex.coupleType,coupleWithId:form.cwith||null,isNew:false});setAdded({...ex,name:form.name.trim()});}
+    else{const np={id:uid(),name:form.name.trim(),gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};onRegister(np);setAdded(np);}
+    setStep("success");
+  };
+  return <Overlay onClose={onClose}>
+    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:18,width:490,maxWidth:"96vw",maxHeight:"94vh",overflowY:"auto"}}>
+      <div style={{padding:"18px 22px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><div style={{fontSize:16,fontWeight:800,color:G.text}}>{step==="scan"?"📷 QR Check-in":step==="form"?"📝 Đăng ký":"✅ Check in!"}</div>
+          <div style={{fontSize:10,color:G.muted,marginTop:2}}>{step==="scan"?"Quét mã hoặc tìm tên":step==="form"?"Điền thông tin":"Vào hàng chờ"}</div></div>
+        <button onClick={onClose} style={{...bS,padding:"4px 9px",fontSize:14}}>✕</button>
+      </div>
+      <div style={{padding:"14px 22px 22px"}}>
+        {step==="scan"&&<>
+          <div style={{background:G.card,borderRadius:12,padding:18,textAlign:"center",marginBottom:14,border:`1px solid ${G.border}`}}>
+            <div style={{width:100,height:100,margin:"0 auto 10px",background:G.dim+"44",borderRadius:10,border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36}}>⬛</div>
+            <div style={{fontSize:11,color:G.muted,marginBottom:12}}>Hướng camera vào QR code</div>
+            <button onClick={simulate} style={bP}>🎲 Giả lập quét QR</button>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tìm tên..." style={{...iS,marginBottom:10}}/>
+          <div style={{maxHeight:190,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
+            {filtered.map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:8,background:G.card,border:`1px solid ${p.checkedIn?G.accent+"55":G.border}`}}>
+              <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:G.text}}>{safe(p.name)}</div>
+                <div style={{display:"flex",gap:3,marginTop:2,flexWrap:"wrap"}}><GBadge gender={p.gender}/><SBadge skill={p.skill}/><DBadge dtype={p.dtype}/>{p.coupleId&&<CBadge type={p.coupleType}/>}</div></div>
+              {p.checkedIn?<Chip label="✅ IN" color={G.accent}/>:<button onClick={()=>{setForm({name:p.name,gender:p.gender,skill:p.skill,dtype:p.dtype||"any",cwith:"",ctype:"couple"});setSname(p.name);setStep("form");}} style={{...bP,fontSize:10,padding:"4px 10px"}}>Đăng ký</button>}
+            </div>)}
+          </div>
+          <button onClick={()=>{setForm({name:safe(search).trim(),gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});setSname("");setStep("form");}} style={{...bP,width:"100%",marginTop:12,padding:"10px 0"}}>➕ Thêm người chơi mới</button>
+        </>}
+        {step==="form"&&<>
+          {sname&&<div style={{padding:"7px 12px",borderRadius:8,background:G.accent+"12",border:`1px solid ${G.accent}33`,marginBottom:14,fontSize:11,color:G.accent,fontWeight:600}}>🎯 Nhận dạng: <strong>{sname}</strong></div>}
+          <Fld label="TÊN"><input value={form.name} onChange={e=>{sf("name",e.target.value);setErr("");}} placeholder="VD: Minh Tuấn..." style={iS} autoFocus onKeyDown={e=>e.key==="Enter"&&submit()}/></Fld>
+          <Fld label="GIỚI TÍNH"><div style={{display:"flex",gap:7}}>{[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=><button key={g.v} onClick={()=>sf("gender",g.v)} style={{flex:1,padding:"9px 0",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,border:`2px solid ${form.gender===g.v?g.c:G.border}`,background:form.gender===g.v?g.c+"25":"transparent",color:form.gender===g.v?g.c:G.muted}}>{g.l}</button>)}</div></Fld>
+          <Fld label="TRÌNH ĐỘ">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5,marginBottom:5}}>
+              {SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=form.skill===s;return <button key={s} onClick={()=>sf("skill",s)} style={{padding:"8px 3px",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}><div>{s}</div></button>;})}
+            </div>
+          </Fld>
+          <Fld label="KIỂU ĐÔI">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>{DTYPE_OPT.map(d=>{const sel=form.dtype===d.val;return <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"7px 3px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>;})}</div>
+          </Fld>
+          <Fld label="CẶP ĐÔI (tuỳ chọn)">
+            <div style={{display:"flex",gap:7,marginBottom:7}}>{[{v:"couple",l:"💑 Couple"},{v:"spouse",l:"💍 Vợ/Chồng"}].map(t=><button key={t.v} onClick={()=>sf("ctype",t.v)} style={{flex:1,padding:"6px 0",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:10,border:`2px solid ${form.ctype===t.v?G.pink:G.border}`,background:form.ctype===t.v?G.pink+"22":"transparent",color:form.ctype===t.v?G.pink:G.muted}}>{t.l}</button>)}</div>
+            <select value={form.cwith} onChange={e=>sf("cwith",e.target.value)} style={{...iS,fontSize:11}}>
+              <option value="">-- Không kết đôi --</option>
+              {checkedIn.filter(p=>safe(p.name).toLowerCase()!==safe(form.name).toLowerCase().trim()).map(p=><option key={p.id} value={p.id}>{safe(p.name)} ({p.gender}, {p.skill})</option>)}
+            </select>
+          </Fld>
+          {err&&<div style={{color:G.red,fontSize:11,marginBottom:10}}>{err}</div>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={submit} style={{...bP,flex:1,padding:"11px 0"}}>✅ Check in</button>
+            <button onClick={()=>setStep("scan")} style={bS}>← Quay lại</button>
+          </div>
+        </>}
+        {step==="success"&&added&&<>
+          <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:44,marginBottom:12}}>🎉</div>
+            <div style={{fontSize:18,fontWeight:900,color:G.accent,marginBottom:4}}>{safe(added.name)}</div>
+            <div style={{fontSize:11,color:G.muted,marginBottom:16}}>{added.isNew?"Người chơi mới":"Check in lại"} · Vào hàng chờ ⏳</div>
+            <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:20}}><GBadge gender={added.gender}/><SBadge skill={added.skill}/><DBadge dtype={added.dtype}/></div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{setStep("scan");setSname("");setSearch("");setAdded(null);}} style={{...bP,flex:1,padding:"11px 0"}}>📷 Check in tiếp</button>
+            <button onClick={onClose} style={{...bS,padding:"11px 14px"}}>Xong</button>
+          </div>
+        </>}
+      </div>
+    </div>
+  </Overlay>;
+}
+
+// ══════════════════════════════════════
+// CUSTOM MATCH
+// ══════════════════════════════════════
+function CustomModal({players,onAdd,onClose}){
+  const av=players.filter(p=>p&&p.checkedIn&&p.name);
+  const [sel,setSel]=useState([]),[dtype,setDtype]=useState("mixed");
+  const tog=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p.slice(-3),id]);
+  const t1=sel.slice(0,2).map(id=>av.find(p=>p.id===id)).filter(Boolean);
+  const t2=sel.slice(2,4).map(id=>av.find(p=>p.id===id)).filter(Boolean);
+  const diff=t1.length===2&&t2.length===2?Math.abs(teamElo(t1)-teamElo(t2)):null;
+  return <MBox title="✏️ Custom Match" sub="Chọn 4: 2 đầu=A · 2 sau=B" onClose={onClose} w={520}>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>{DTYPE_OPT.map(d=><button key={d.val} onClick={()=>setDtype(d.val)} style={{flex:1,padding:"6px 4px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${dtype===d.val?d.color:G.border}`,background:dtype===d.val?d.color+"22":"transparent",color:dtype===d.val?d.color:G.muted}}>{d.label}</button>)}</div>
+    <div style={{display:"flex",gap:12,marginBottom:12}}>
+      <div style={{flex:1,padding:"8px 10px",borderRadius:9,background:G.accent+"10",border:`1px solid ${G.accent}30`,minHeight:56}}>
+        <div style={{fontSize:9,color:G.accent,fontWeight:700,marginBottom:4}}>TEAM A</div>
+        {!t1.length?<div style={{fontSize:10,color:G.dim}}>Chưa chọn</div>:t1.map(p=><div key={p.id} style={{fontSize:11,color:G.text,fontWeight:600}}>{safe(p.name)} <SBadge skill={p.skill}/></div>)}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:3}}><div style={{fontSize:12,fontWeight:800,color:G.dim}}>VS</div>{diff!==null&&<Chip label={`Δ${diff}`} color={diff<40?G.accent:G.gold}/>}</div>
+      <div style={{flex:1,padding:"8px 10px",borderRadius:9,background:G.gold+"10",border:`1px solid ${G.gold}30`,minHeight:56}}>
+        <div style={{fontSize:9,color:G.gold,fontWeight:700,marginBottom:4}}>TEAM B</div>
+        {!t2.length?<div style={{fontSize:10,color:G.dim}}>Chưa chọn</div>:t2.map(p=><div key={p.id} style={{fontSize:11,color:G.text,fontWeight:600}}>{safe(p.name)} <SBadge skill={p.skill}/></div>)}
+      </div>
+    </div>
+    <div style={{maxHeight:200,overflowY:"auto",display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:12}}>
+      {av.map(p=>{const idx=sel.indexOf(p.id);const s=idx>=0;const tl=s?(idx<2?"A":"B"):null;const c=tl==="A"?G.accent:G.gold;
+        return <button key={p.id} onClick={()=>tog(p.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 9px",borderRadius:8,cursor:"pointer",textAlign:"left",border:`2px solid ${s?c:G.border}`,background:s?c+"18":"transparent"}}>
+          {s&&<div style={{width:16,height:16,borderRadius:3,background:c,color:"#fff",fontSize:8,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{tl}</div>}
+          <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</div><div style={{display:"flex",gap:2}}><GBadge gender={p.gender}/><SBadge skill={p.skill}/></div></div>
+        </button>;})}
+    </div>
+    <div style={{display:"flex",gap:7}}>
+      <button onClick={()=>onAdd({team1:t1,team2:t2,dtype})} disabled={sel.length!==4} style={{...bP,flex:1,opacity:sel.length===4?1:.4}}>✅ Thêm vào Queue</button>
+      <button onClick={()=>setSel([])} style={bS}>Reset</button><button onClick={onClose} style={bS}>Huỷ</button>
+    </div>
+  </MBox>;
+}
+
+// ══════════════════════════════════════
+// COUPLE MODAL
+// ══════════════════════════════════════
+function CoupleModal({players,setPlayers,onClose}){
+  const [sel,setSel]=useState([]),[ct,setCt]=useState("couple");
+  const cm={};players.forEach(p=>{if(p?.coupleId){if(!cm[p.coupleId])cm[p.coupleId]=[];cm[p.coupleId].push(p);}});
+  const tog=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p.slice(-1),id]);
+  const link=()=>{if(sel.length!==2)return;const cid=`${ct}-${uid()}`;setPlayers(p=>p.map(x=>sel.includes(x.id)?{...x,coupleId:cid,coupleType:ct}:x));setSel([]);};
+  const unlink=cid=>setPlayers(p=>p.map(x=>x.coupleId===cid?{...x,coupleId:null,coupleType:null}:x));
+  return <MBox title="💑 Couple / Vợ chồng" onClose={onClose} w={480}>
+    {Object.entries(cm).length>0&&<div style={{marginBottom:14}}>
+      {Object.entries(cm).map(([cid,pp])=><div key={cid} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 11px",borderRadius:8,background:G.card,border:`1px solid ${G.pink}44`,marginBottom:6}}>
+        <span>{pp[0]?.coupleType==="spouse"?"💍":"💑"}</span>
+        <div style={{flex:1,display:"flex",gap:8}}>{pp.map(p=><span key={p.id} style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</span>)}</div>
+        <button onClick={()=>unlink(cid)} style={bR}>✕</button>
+      </div>)}
+    </div>}
+    <div style={{display:"flex",gap:7,marginBottom:9}}>{[{v:"couple",l:"💑 Couple"},{v:"spouse",l:"💍 Vợ/Chồng"}].map(t=><button key={t.v} onClick={()=>setCt(t.v)} style={{flex:1,padding:"7px 0",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,border:`2px solid ${ct===t.v?G.pink:G.border}`,background:ct===t.v?G.pink+"22":"transparent",color:ct===t.v?G.pink:G.muted}}>{t.l}</button>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,maxHeight:220,overflowY:"auto",marginBottom:11}}>
+      {players.filter(p=>p&&p.checkedIn&&p.name).map(p=>{const s=sel.includes(p.id);return <button key={p.id} onClick={()=>tog(p.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 9px",borderRadius:7,cursor:"pointer",textAlign:"left",border:`2px solid ${s?G.pink:G.border}`,background:s?G.pink+"20":"transparent"}}>
+        <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</div><div style={{display:"flex",gap:2}}><GBadge gender={p.gender}/><SBadge skill={p.skill}/></div></div>
+        {s&&<span style={{color:G.pink}}>✓</span>}
+      </button>;})}
+    </div>
+    <div style={{display:"flex",gap:7}}>
+      <button onClick={link} disabled={sel.length!==2} style={{...bP,flex:1,opacity:sel.length===2?1:.4}}>💑 Kết đôi ({sel.length}/2)</button>
+      <button onClick={onClose} style={bS}>Đóng</button>
+    </div>
+  </MBox>;
+}
+
+// ══════════════════════════════════════
+// COURT CARD
+// ══════════════════════════════════════
+function TBlock({team,label,color}){
+  if(!team?.length) return null;
+  return <div style={{padding:"6px 9px",borderRadius:8,background:color+"12",border:`1px solid ${color}30`}}>
+    <div style={{fontSize:8,color,fontWeight:700,letterSpacing:.8,marginBottom:4}}>{label}</div>
+    {team.filter(Boolean).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+      <div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</span><SBadge skill={p.skill}/></div>
+      <div style={{display:"flex",gap:2}}><GBadge gender={p.gender}/></div>
+    </div>)}
+    <div style={{fontSize:9,color,fontWeight:700,borderTop:`1px solid ${color}20`,paddingTop:3,marginTop:3}}>⌀ {teamElo(team)}</div>
+  </div>;
+}
+function CourtCard({court,elapsed,onScore,onAssign,next,readOnly}){
+  const m=court.match;
+  const mm=String(Math.floor((elapsed||0)/60)).padStart(2,"0"),ss=String((elapsed||0)%60).padStart(2,"0");
+  const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
+  const diff=m?Math.abs(teamElo(m.team1)-teamElo(m.team2)):0;
+  return <div style={{background:G.panel,border:`2px solid ${m?dc.color+"77":G.border}`,borderRadius:14,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+    <div style={{padding:"8px 12px",background:m?dc.color+"14":G.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${G.border}`}}>
+      <div><div style={{fontWeight:800,fontSize:13,color:G.text}}>{court.name}</div>{m&&<DBadge dtype={m.dtype}/>}</div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        {m&&<div style={{fontFamily:"monospace",fontSize:15,fontWeight:900,color:dc.color}}>{mm}:{ss}</div>}
+        <Chip label={m?"🔴 LIVE":"🟢 FREE"} color={m?G.red:G.accent}/>
+      </div>
+    </div>
+    <div style={{padding:10,flex:1}}>
+      {m?(<>
+        <TBlock team={m.team1} label="TEAM A" color={G.accent}/>
+        <div style={{textAlign:"center",padding:"4px 0",fontSize:9,color:G.dim}}>Δ{diff}{diff<40?" ✓":" ⚠"}</div>
+        <TBlock team={m.team2} label="TEAM B" color={G.gold}/>
+        {!readOnly&&<button onClick={()=>onScore(court.id)} style={{...bP,width:"100%",marginTop:8,padding:"7px 0",fontSize:11}}>📊 Nhập tỉ số</button>}
+      </>):(
+        <div style={{textAlign:"center",padding:"9px 0"}}>
+          <div style={{fontSize:24,marginBottom:4}}>🏓</div>
+          <div style={{fontSize:10,color:G.muted,marginBottom:8}}>Sân trống</div>
+          {!readOnly&&next?.length?<div style={{display:"flex",gap:4,justifyContent:"center",flexWrap:"wrap"}}>
+            {next.map((q,i)=>{const qc=DTYPE_OPT.find(d=>d.val===q.dtype)?.color||G.accent;return <button key={i} onClick={()=>onAssign(court.id,q)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${qc}`,background:qc+"14",color:qc,fontWeight:700,cursor:"pointer",fontSize:9}}>▶ {DTYPE_OPT.find(d=>d.val===q.dtype)?.label}</button>;})}
+          </div>:<div style={{fontSize:9,color:G.dim}}>Chưa có trận</div>}
+        </div>
+      )}
+    </div>
+  </div>;
+}
+
+function QRow({q,idx,courts,onAssign,onRemove,readOnly}){
+  const free=courts.filter(c=>!c.match);
+  const diff=Math.abs(teamElo(q.team1||[])-teamElo(q.team2||[]));
+  return <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,background:G.card,border:`1px solid ${q.custom?G.purple+"44":q.coupleMatch?G.pink+"44":G.border}`}}>
+    <span style={{fontSize:10,fontWeight:700,color:G.muted,minWidth:14}}>#{idx+1}</span>
+    {q.custom&&<Chip label="✏️" color={G.purple} sm/>}{q.coupleMatch&&<Chip label="💑" color={G.pink} sm/>}
+    <DBadge dtype={q.dtype}/>
+    <div style={{flex:1}}>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+        {(q.team1||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:10,color:G.accent,fontWeight:600}}>{safe(p.name)}</span>)}
+        <span style={{fontSize:10,color:G.dim}}>vs</span>
+        {(q.team2||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:10,color:G.gold,fontWeight:600}}>{safe(p.name)}</span>)}
+        <Chip label={`Δ${diff}`} color={diff<40?G.accent:G.gold} sm/>
+      </div>
+    </div>
+    {!readOnly&&<div style={{display:"flex",gap:3}}>
+      {free.slice(0,2).map(c=><button key={c.id} onClick={()=>onAssign(c.id,q)} style={{padding:"3px 7px",borderRadius:5,border:"none",background:G.accent,color:"#fff",cursor:"pointer",fontWeight:700,fontSize:9}}>▶{c.name.replace("Sân ","S")}</button>)}
+      {onRemove&&<button onClick={onRemove} style={{padding:"3px 6px",borderRadius:5,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,cursor:"pointer",fontSize:9}}>✕</button>}
+    </div>}
+  </div>;
+}
+
+function HCard({h}){
+  if(!h?.team1||!h?.team2) return null;
+  const dc=DTYPE_OPT.find(d=>d.val===h.dtype)||DTYPE_OPT[3];
+  return <div style={{background:G.panel,borderRadius:8,padding:"8px 11px",border:`1px solid ${G.border}`}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><Chip label={dc.label} color={dc.color}/><span style={{fontSize:9,color:G.muted}}>{h.time}</span></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:5,alignItems:"center"}}>
+      <div>{h.team1.filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,fontWeight:700,color:h.winner===1?G.accent:G.muted}}>{safe(p.name)}{h.winner===1?" 🏆":""}</div>)}</div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:14,fontWeight:900,color:G.accent}}>{h.score||"?"}</div></div>
+      <div style={{textAlign:"right"}}>{h.team2.filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,fontWeight:700,color:h.winner===2?G.gold:G.muted}}>{h.winner===2?"🏆 ":""}{safe(p.name)}</div>)}</div>
+    </div>
+    <div style={{fontSize:8,color:G.dim,textAlign:"right",marginTop:3}}>±{h.eloDelta} ELO · {h.courtId}</div>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// TV MODE
+// ══════════════════════════════════════
+function TVMode({courts,elapsed,queue,players,history,onClose}){
+  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
+  return <div style={{position:"fixed",inset:0,zIndex:800,background:"#000",display:"flex",flexDirection:"column"}}>
+    <div style={{padding:"7px 16px",background:"#050d18",borderBottom:"2px solid #0c2040",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:G.accent}}>🏓 PICKLEBALL SOCIAL</span>
+      <button onClick={onClose} style={bS}>✕ Đóng TV</button>
+    </div>
+    <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7,padding:9,overflow:"hidden"}}>
+      {courts.map(ct=>{const m=ct.match;const el=elapsed[ct.id]||0;const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
+        return <div key={ct.id} style={{background:m?"#081810":"#060e18",borderRadius:11,border:`2px solid ${m?dc.color+"66":G.border}`,display:"flex",flexDirection:"column",padding:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}><span style={{fontSize:14,fontWeight:900,color:G.text}}>{ct.name}</span>{m&&<span style={{fontFamily:"monospace",fontSize:16,color:dc.color}}>{mm}:{ss}</span>}</div>
+          {m?<>
+            <div style={{padding:"5px 7px",borderRadius:7,background:G.accent+"10",border:`1px solid ${G.accent}30`,marginBottom:4}}>{(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
+            <div style={{textAlign:"center",fontSize:11,color:G.dim}}>VS</div>
+            <div style={{padding:"5px 7px",borderRadius:7,background:G.gold+"10",border:`1px solid ${G.gold}30`,marginTop:4}}>{(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
+          </>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><div style={{fontSize:22,color:G.accent}}>🟢</div><div style={{fontSize:11,color:G.muted,marginTop:3}}>READY</div></div>}
+        </div>;})}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,padding:"0 9px 9px"}}>
+      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.blue}44`}}>
+        <div style={{fontSize:9,letterSpacing:3,color:G.blue,marginBottom:5}}>⚡ QUEUE ({queue.length})</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:10,color:G.text}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} vs {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
+          {!queue.length&&<div style={{color:G.dim,fontSize:10}}>Queue trống</div>}
+        </div>
+      </div>
+      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
+        <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
+        <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+          {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// VIEWER MODE
+// ══════════════════════════════════════
+function ViewerMode({players,courts,history,queue,elapsed,events,onLogout}){
+  const [vtab,setVtab]=useState("courts");
+  const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k);
+  const VTABS=[{id:"courts",l:"🏟️ Sân Live"},{id:"leaderboard",l:"🏆 Xếp hạng"},{id:"queue",l:"⚔️ Queue"},{id:"history",l:"📋 Lịch sử"},{id:"analytics",l:"📈 Thống kê"}];
+  return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+    <header style={{height:50,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${G.gold},${G.red})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>👁</div>
+        <div><div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1}}>LIVE VIEWER</div><div style={{fontSize:8,color:G.muted,letterSpacing:1.5}}>READ ONLY</div></div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
+        <Chip label={`🔴 ${courts.filter(c=>c.match).length}`} color={G.red}/>
+        <button onClick={onLogout} style={bS}>← Thoát</button>
+      </div>
+    </header>
+    <nav style={{display:"flex",gap:2,padding:"4px 12px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
+      {VTABS.map(t=><button key={t.id} onClick={()=>setVtab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:vtab===t.id?G.gold+"22":"transparent",color:vtab===t.id?G.gold:G.muted,borderBottom:vtab===t.id?`2px solid ${G.gold}`:"2px solid transparent"}}>{t.l}</button>)}
+    </nav>
+    <main style={{padding:"12px 14px",maxWidth:1400,margin:"0 auto"}}>
+      {vtab==="courts"&&<div>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>🏟️ 5 Sân — Live</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10,marginBottom:16}}>
+          {courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={[]} readOnly/>)}
+        </div>
+        {history.slice(0,6).length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:8}}>KẾT QUẢ GẦN ĐÂY</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{history.slice(0,6).map(h=><HCard key={h.id} h={h}/>)}</div></>}
+      </div>}
+      {vtab==="leaderboard"&&<LeaderView ranked={ranked}/>}
+      {vtab==="queue"&&<div>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>⚔️ Queue</div>
+        {!queue.length?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"40px 0"}}>Chưa có trận</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} readOnly/>)}</div>}
+      </div>}
+      {vtab==="history"&&<HistoryTab history={history} events={events} players={players} readOnly/>}
+      {vtab==="analytics"&&<AnalyticsView players={players} history={history} courts={courts}/>}
+    </main>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// LEADERBOARD
+// ══════════════════════════════════════
+function LeaderView({ranked}){
+  return <div>
+    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Kootoro</div>
+    {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:16,justifyContent:"center",alignItems:"flex-end"}}>
+      {[ranked[1],ranked[0],ranked[2]].filter(Boolean).map((p,pi)=>{
+        const rank=pi===0?2:pi===1?1:3;const h=rank===1?120:rank===2?90:75;const c=rank===1?G.gold:rank===2?"#9ca3af":"#b87333";
+        return <div key={p.id} style={{textAlign:"center",width:120}}>
+          <div style={{fontSize:11,fontWeight:800,color:G.text,marginBottom:3}}>{safe(p.name)}</div>
+          <div style={{display:"flex",gap:3,justifyContent:"center",marginBottom:3}}><SBadge skill={p.skill}/><GBadge gender={p.gender}/></div>
+          <div style={{fontSize:rank===1?22:18,fontWeight:900,color:c,marginBottom:4}}>{p.k>0?"+":""}{p.k}</div>
+          <div style={{height:h,background:`${c}22`,border:`2px solid ${c}55`,borderRadius:"7px 7px 0 0",display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:6}}>
+            <span style={{fontSize:rank===1?28:22}}>{rank===1?"🥇":rank===2?"🥈":"🥉"}</span>
+          </div>
+        </div>;
+      })}
+    </div>}
+    <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
+        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div>
+      </div>
+      {ranked.map((p,i)=>{
+        const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0;
+        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:i<ranked.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
+          <div style={{fontSize:12,fontWeight:800,color:i<3?[G.gold,"#9ca3af","#b87333"][i]:G.muted}}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</div>
+          <div style={{fontSize:11,fontWeight:700,color:G.text,display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}{p.checkedIn&&<span style={{fontSize:8,color:G.accent}}>●</span>}</div>
+          <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
+          <div style={{fontSize:12,fontWeight:900,color:SKILL_COLOR[p.skill]||G.muted}}>{p.elo||"?"}</div>
+          <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
+          <div style={{fontSize:10,color:wr>=50?G.accent:G.red,fontWeight:700}}>{wr}%</div>
+          <div style={{fontSize:13,fontWeight:800,color:p.k>0?G.gold:p.k<0?G.red:G.muted}}>{p.k>0?"+":""}{p.k}</div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// ANALYTICS VIEW
+// ══════════════════════════════════════
+function AnalyticsView({players,history,courts}){
+  const ci=players.filter(p=>p?.checkedIn&&p.name);
+  const males=ci.filter(p=>p.gender==="M").length,females=ci.filter(p=>p.gender==="F").length;
+  const bySkill=SKILL_LEVELS.map(s=>({skill:s,total:players.filter(p=>p?.skill===s).length,in:ci.filter(p=>p.skill===s).length}));
+  const maxSk=Math.max(...bySkill.map(s=>s.total),1);
+  return <div>
+    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>📈 Thống kê</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:11}}>
+      <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,padding:13}}>
+        <div style={{fontSize:8,fontWeight:700,color:G.muted,letterSpacing:1,marginBottom:10}}>⚥ GIỚI TÍNH</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:12,justifyContent:"center",height:70}}>
+          {[{l:"♂",v:males,c:"#60a5fa"},{l:"♀",v:females,c:"#f472b6"}].map(g=>(
+            <div key={g.l} style={{textAlign:"center"}}><div style={{height:`${ci.length?(g.v/ci.length)*60:0}px`,minHeight:2,width:36,background:g.c,borderRadius:"4px 4px 0 0"}}/><div style={{fontSize:16,fontWeight:900,color:g.c,marginTop:4}}>{g.v}</div><div style={{fontSize:8,color:G.muted}}>{g.l}</div></div>
+          ))}
+        </div>
+      </div>
+      <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,padding:13}}>
+        <div style={{fontSize:8,fontWeight:700,color:G.muted,letterSpacing:1,marginBottom:10}}>🎯 TRÌNH ĐỘ</div>
+        {bySkill.map(s=><div key={s.skill} style={{marginBottom:7}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><SBadge skill={s.skill}/><span style={{fontSize:9,color:G.muted}}>{s.in}/{s.total}</span></div>
+          <div style={{background:G.dim,borderRadius:3,height:5,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/maxSk)*100}%`,background:SKILL_COLOR[s.skill],borderRadius:3}}/></div>
+        </div>)}
+      </div>
+      <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,padding:13}}>
+        <div style={{fontSize:8,fontWeight:700,color:G.muted,letterSpacing:1,marginBottom:10}}>📊 OVERVIEW</div>
+        {[{l:"Check-in",v:ci.length,c:G.accent},{l:"Đang đấu",v:courts.filter(c=>c.match).length,c:G.red},{l:"Trận xong",v:history.length,c:"#34d399"},{l:"Couples",v:Math.round(players.filter(p=>p?.coupleId).length/2),c:G.pink}].map(s=>(
+          <div key={s.l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{fontSize:10,color:G.muted}}>{s.l}</span><span style={{fontSize:11,fontWeight:800,color:s.c}}>{s.v}</span></div>
+        ))}
+      </div>
+    </div>
+  </div>;
+}
+
+// ══════════════════════════════════════
+// HISTORY TAB — lịch sử theo event & tổng hợp
+// ══════════════════════════════════════
+function HistoryTab({history, events, players, readOnly, onEditEvent, onDeleteEvent, activeEventId}){
+  const [view, setView] = useState("event");   // "event" | "all"
+  const [selEvId, setSelEvId] = useState(activeEventId||"all");
+  const [search, setSearch] = useState("");
+  const [filterDtype, setFilterDtype] = useState("all");
+  const [editingEv, setEditingEv] = useState(null);
+
+  // Gom history theo eventId
+  const byEvent = {};
+  history.forEach(h=>{
+    const eid = h.eventId||"legacy";
+    if(!byEvent[eid]) byEvent[eid]=[];
+    byEvent[eid].push(h);
+  });
+
+  const eventList = events||[];
+  const sq = safe(search).toLowerCase();
+
+  const filterH = (hs) => {
+    let arr = [...hs];
+    if(sq) arr=arr.filter(h=>[...(h.team1||[]),...(h.team2||[])].filter(Boolean).some(p=>safe(p.name).toLowerCase().includes(sq)));
+    if(filterDtype!=="all") arr=arr.filter(h=>h.dtype===filterDtype);
+    return arr;
+  };
+
+  // Stats cho một list history
+  const calcStats = (hs) => {
+    const total=hs.length;
+    const byDtype={};
+    const topWinner={};
+    hs.forEach(h=>{
+      byDtype[h.dtype]=(byDtype[h.dtype]||0)+1;
+      const wt=(h.winner===1?h.team1:h.team2)||[];
+      wt.filter(Boolean).forEach(p=>{topWinner[p.id]=(topWinner[p.id]||{name:p.name,wins:0});topWinner[p.id].wins++;});
+    });
+    const topP=Object.values(topWinner).sort((a,b)=>b.wins-a.wins).slice(0,3);
+    const avgEloD=total?Math.round(hs.reduce((s,h)=>s+(h.eloDelta||0),0)/total):0;
+    return {total,byDtype,topP,avgEloD};
+  };
+
+  // Render 1 event block
+  const renderEventBlock = (ev, hs, collapsed, onToggle) => {
+    const st=calcStats(hs);
+    return <div key={ev.id} style={{background:G.panel,borderRadius:12,border:`1px solid ${ev.id===activeEventId?G.accent+"66":G.border}`,marginBottom:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div onClick={onToggle} style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:ev.id===activeEventId?G.accent+"10":G.card,borderBottom:collapsed?undefined:`1px solid ${G.border}`}}>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <span style={{fontSize:13,fontWeight:800,color:G.text}}>{ev.name}</span>
+            {ev.id===activeEventId&&<Chip label="🔴 ACTIVE" color={G.accent} sm/>}
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
+            <span style={{fontSize:10,color:G.muted}}>{ev.date}</span>
+            {ev.location&&<span style={{fontSize:10,color:G.blue}}>📍 {ev.location}</span>}
+            <span style={{fontSize:10,color:G.gold}}>⚔️ {hs.length} trận</span>
+            {ev.note&&<span style={{fontSize:10,color:G.dim}}>💬 {ev.note}</span>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {!readOnly&&<>
+            <button onClick={e=>{e.stopPropagation();setEditingEv(ev);}} style={{...bS,padding:"3px 8px",fontSize:10}}>✏️</button>
+          </>}
+          <span style={{color:G.muted,fontSize:12}}>{collapsed?"▶":"▼"}</span>
+        </div>
+      </div>
+
+      {!collapsed&&<div style={{padding:"10px 14px"}}>
+        {/* Stats row */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:12}}>
+          <div style={{textAlign:"center",padding:"7px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`}}><div style={{fontSize:18,fontWeight:900,color:G.accent}}>{st.total}</div><div style={{fontSize:8,color:G.muted}}>Tổng trận</div></div>
+          <div style={{textAlign:"center",padding:"7px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`}}><div style={{fontSize:18,fontWeight:900,color:G.gold}}>±{st.avgEloD}</div><div style={{fontSize:8,color:G.muted}}>Avg ELO Δ</div></div>
+          <div style={{textAlign:"center",padding:"7px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`,gridColumn:"span 2"}}>
+            <div style={{fontSize:8,color:G.muted,marginBottom:4}}>TOP THẮNG</div>
+            {st.topP.map((p,i)=><span key={i} style={{fontSize:9,color:G.gold,marginRight:6}}>{["🥇","🥈","🥉"][i]}{p.name}×{p.wins}</span>)}
+            {!st.topP.length&&<span style={{fontSize:9,color:G.dim}}>–</span>}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tên..." style={{...iS,maxWidth:140,fontSize:11}}/>
+          <select value={filterDtype} onChange={e=>setFilterDtype(e.target.value)} style={{...iS,maxWidth:110,fontSize:11}}>
+            <option value="all">Tất cả kiểu</option>
+            {DTYPE_OPT.map(d=><option key={d.val} value={d.val}>{d.label}</option>)}
+          </select>
+        </div>
+
+        {/* Match list */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:7}}>
+          {filterH(hs).map(h=><HCard key={h.id} h={h}/>)}
+        </div>
+        {!filterH(hs).length&&<div style={{textAlign:"center",color:G.dim,padding:"16px 0",fontSize:11}}>Không có trận nào</div>}
+      </div>}
+    </div>;
+  };
+
+  // State collapse per event
+  const [collapsed, setCollapsed] = useState({});
+  const togCollapse = id => setCollapsed(p=>({...p,[id]:!p[id]}));
+
+  // View: theo event
+  const renderByEvent = () => {
+    if(!eventList.length) return <div style={{textAlign:"center",color:G.dim,padding:"32px 0",fontSize:12}}>Chưa có event nào. Tạo event đầu tiên!</div>;
+    return eventList.slice().reverse().map(ev=>{
+      const hs=byEvent[ev.id]||[];
+      return renderEventBlock(ev, hs, !!collapsed[ev.id], ()=>togCollapse(ev.id));
+    });
+  };
+
+  // View: tổng hợp tất cả
+  const renderAll = () => {
+    const allH = filterH(history);
+    const st = calcStats(history);
+    return <>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:14}}>
+        {[{l:"Tổng trận",v:st.total,c:G.accent},{l:"Events",v:eventList.length,c:G.blue},{l:"Avg ELO Δ",v:`±${st.avgEloD}`,c:G.gold},{l:"Người chơi",v:players.length,c:G.purple},{l:"Hôm nay",v:(byEvent[activeEventId]||[]).length,c:G.red}].map(s=>(
+          <div key={s.l} style={{textAlign:"center",padding:"10px 6px",borderRadius:10,background:G.panel,border:`1px solid ${G.border}`}}>
+            <div style={{fontSize:20,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:8,color:G.muted,marginTop:2}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+      {/* By dtype */}
+      <div style={{background:G.panel,borderRadius:10,border:`1px solid ${G.border}`,padding:"10px 14px",marginBottom:12}}>
+        <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>PHÂN LOẠI KIỂU ĐÔI</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {DTYPE_OPT.map(d=>{const cnt=st.byDtype[d.val]||0;return <div key={d.val} style={{padding:"5px 12px",borderRadius:7,background:d.color+"15",border:`1px solid ${d.color}33`}}>
+            <span style={{fontSize:11,color:d.color,fontWeight:700}}>{d.label}</span><span style={{fontSize:11,color:G.muted,marginLeft:6}}>{cnt} trận</span>
+          </div>;})}
+        </div>
+      </div>
+      {/* Filters */}
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tên..." style={{...iS,maxWidth:150,fontSize:11}}/>
+        <select value={filterDtype} onChange={e=>setFilterDtype(e.target.value)} style={{...iS,maxWidth:120,fontSize:11}}>
+          <option value="all">Tất cả kiểu</option>
+          {DTYPE_OPT.map(d=><option key={d.val} value={d.val}>{d.label}</option>)}
+        </select>
+        <span style={{fontSize:10,color:G.muted,alignSelf:"center"}}>{allH.length}/{history.length} trận</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:7}}>
+        {allH.map(h=><HCard key={h.id} h={h}/>)}
+      </div>
+      {!allH.length&&<div style={{textAlign:"center",color:G.dim,padding:"24px 0",fontSize:11}}>Không tìm thấy</div>}
+    </>;
+  };
+
+  return <div>
+    {editingEv&&<EventModal event={editingEv} onSave={ev=>{onEditEvent&&onEditEvent(ev);setEditingEv(null);}} onClose={()=>setEditingEv(null)} isNew={false}/>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:800,color:G.text}}>📋 Lịch sử trận đấu</div>
+      <div style={{display:"flex",gap:4}}>
+        <button onClick={()=>setView("event")} style={{...bS,color:view==="event"?G.accent:G.muted,borderColor:view==="event"?G.accent:G.border,fontSize:11}}>🗓️ Theo event</button>
+        <button onClick={()=>setView("all")} style={{...bS,color:view==="all"?G.accent:G.muted,borderColor:view==="all"?G.accent:G.border,fontSize:11}}>📊 Tổng hợp</button>
+      </div>
+    </div>
+    {view==="event"?renderByEvent():renderAll()}
+  </div>;
+}
+
+// ══════════════════════════════════════
+// KIOSK TAB
+// ══════════════════════════════════════
+function KioskTab({players, onRegister, queue, courts, history}){
+  const [step, setStep] = useState("welcome");
+  const [form, setForm] = useState({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});
+  const [err, setErr] = useState("");
+  const [submitted, setSubmitted] = useState(null);
+  const [nameSearch, setNameSearch] = useState("");
+  const [autoReset, setAutoReset] = useState(null);
+  const timerRef = useRef();
+  const sf = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  useEffect(()=>{
+    if(step==="success"){
+      let t=20; setAutoReset(t);
+      timerRef.current=setInterval(()=>{t--;setAutoReset(t);if(t<=0){clearInterval(timerRef.current);resetKiosk();}},1000);
+    }
+    return()=>clearInterval(timerRef.current);
+  },[step]);
+
+  const resetKiosk=()=>{setStep("welcome");setForm({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});setErr("");setSubmitted(null);setAutoReset(null);};
+  const checkedIn = players.filter(p=>p&&p.checkedIn&&p.name);
+  const nsSafe = safe(nameSearch).toLowerCase();
+  const suggestions = nsSafe.length>=1?players.filter(p=>p&&p.name&&safe(p.name).toLowerCase().includes(nsSafe)).slice(0,5):[];
+  const selectExisting = (p) => {setForm({name:p.name,gender:p.gender,skill:p.skill,dtype:p.dtype||"any",cwith:"",ctype:"couple"});setNameSearch("");setStep("form");};
+  const submit = () => {
+    const nm = safe(form.name).trim();
+    if(!nm){setErr("Vui lòng nhập tên");return;} setErr("");
+    const existing = players.find(p=>p&&safe(p.name).toLowerCase()===nm.toLowerCase());
+    let playerData;
+    if(existing){
+      if(existing.checkedIn){setErr(`${nm} đã check in rồi!`);return;}
+      const cid=form.cwith?(existing.coupleId||`couple-${uid()}`):existing.coupleId;
+      playerData={...existing,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,coupleId:form.cwith?cid:existing.coupleId,coupleType:form.cwith?form.ctype:existing.coupleType,coupleWithId:form.cwith||null,isNew:false};
+    } else {
+      playerData={id:uid(),name:nm,gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};
+    }
+    onRegister(playerData);
+    setSubmitted(playerData);
+    setStep("success");
+  };
+
+  if(step==="welcome") return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{width:"100%",maxWidth:500,textAlign:"center"}}>
+      <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:32}}>
+        {[{v:courts.filter(c=>c.match).length,l:"Sân live",c:G.red},{v:players.filter(p=>p?.checkedIn).length,l:"Check-in",c:G.accent},{v:queue.length,l:"Queue",c:G.purple}].map(s=>(
+          <div key={s.l} style={{padding:"10px 20px",borderRadius:12,background:s.c+"18",border:`1px solid ${s.c}44`,textAlign:"center"}}>
+            <div style={{fontSize:28,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:G.muted}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:56,marginBottom:12}}>🏓</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:8}}>Chào mừng!</div>
+      <div style={{fontSize:14,color:G.muted,marginBottom:32}}>Tự đăng ký để vào hàng chờ</div>
+      <div style={{marginBottom:20}}>
+        <input value={nameSearch} onChange={e=>setNameSearch(e.target.value)} placeholder="Tìm tên nhanh..." style={{...iS,fontSize:16,padding:"12px 16px",borderRadius:12,textAlign:"center"}} autoComplete="off"/>
+        {suggestions.length>0&&<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+          {suggestions.map(p=><button key={p.id} onClick={()=>selectExisting(p)} disabled={p.checkedIn}
+            style={{padding:"10px 16px",borderRadius:10,border:`1px solid ${p.checkedIn?G.accent+"66":G.border}`,background:p.checkedIn?G.accent+"10":G.card,cursor:p.checkedIn?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:10,width:"100%"}}>
+            <div style={{flex:1,textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:p.checkedIn?G.muted:G.text}}>{safe(p.name)}</div>
+            <div style={{display:"flex",gap:4,marginTop:2}}><GBadge gender={p.gender}/><SBadge skill={p.skill}/></div></div>
+            {p.checkedIn?<span style={{fontSize:10,color:G.accent}}>✅ Đã vào</span>:<span style={{fontSize:10,color:G.accent}}>Chọn →</span>}
+          </button>)}
+        </div>}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><div style={{flex:1,height:1,background:G.border}}/><span style={{fontSize:12,color:G.dim}}>hoặc</span><div style={{flex:1,height:1,background:G.border}}/></div>
+      <button onClick={()=>{setNameSearch("");setStep("form");}} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>✏️ Đăng ký mới</button>
+      {history.length>0&&<div style={{marginTop:28,padding:"14px 16px",borderRadius:12,background:G.panel,border:`1px solid ${G.border}`}}>
+        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:10}}>🏆 TOP KOOTORO</div>
+        {[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,3).map((p,i)=>(
+          <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:i<2?6:0}}>
+            <span style={{fontSize:14}}>{["🥇","🥈","🥉"][i]}</span>
+            <span style={{fontSize:13,fontWeight:700,color:G.text,flex:1}}>{safe(p.name)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:G.gold}}>{p.k>0?"+":""}{p.k}</span>
+          </div>
+        ))}
+      </div>}
+    </div>
+  </div>;
+
+  if(step==="form") return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 16px"}}>
+    <div style={{width:"100%",maxWidth:480}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+        <button onClick={resetKiosk} style={{...bS,padding:"6px 12px"}}>← Quay lại</button>
+        <div><div style={{fontSize:18,fontWeight:900,color:"#fff"}}>📝 Thông tin</div></div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>👤 TÊN *</div>
+        <input value={form.name} onChange={e=>{sf("name",e.target.value);setErr("");}} placeholder="Tên đầy đủ..." style={{...iS,fontSize:18,padding:"14px 16px",borderRadius:12,border:`2px solid ${form.name?G.accent:G.border}`}} autoFocus autoComplete="off"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>⚥ GIỚI TÍNH</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[{v:"M",l:"♂ Nam",c:"#60a5fa",e:"👨"},{v:"F",l:"♀ Nữ",c:"#f472b6",e:"👩"}].map(g=>(
+            <button key={g.v} onClick={()=>sf("gender",g.v)} style={{padding:"16px",borderRadius:12,cursor:"pointer",fontWeight:700,fontSize:16,textAlign:"center",border:`3px solid ${form.gender===g.v?g.c:G.border}`,background:form.gender===g.v?g.c+"25":"transparent",color:form.gender===g.v?g.c:G.muted,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <span style={{fontSize:28}}>{g.e}</span>{g.l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>🎯 TRÌNH ĐỘ</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+          {SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=form.skill===s;return(
+            <button key={s} onClick={()=>sf("skill",s)} style={{padding:"12px 4px",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,textAlign:"center",border:`3px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <span style={{fontSize:15,fontWeight:900}}>{s}</span>
+              <span style={{fontSize:8,fontWeight:400,color:sel?c:G.dim}}>{SKILL_DESC[s]}</span>
+            </button>
+          );})}
+        </div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>⚤ KIỂU ĐÔI</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {DTYPE_OPT.map(d=>{const sel=form.dtype===d.val;return(
+            <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"12px 10px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:700,textAlign:"center",border:`3px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted,display:"flex",flexDirection:"column",gap:2,alignItems:"center"}}>
+              <span style={{fontSize:18}}>{d.label.split(" ")[0]}</span>
+              <span>{d.label.split(" ").slice(1).join(" ")}</span>
+              <span style={{fontSize:9,fontWeight:400,color:sel?d.color:G.dim}}>{d.desc}</span>
+            </button>
+          );})}
+        </div>
+      </div>
+      {checkedIn.length>0&&<div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>💑 KẾT ĐÔI (tuỳ chọn)</div>
+        <select value={form.cwith} onChange={e=>sf("cwith",e.target.value)} style={{...iS,fontSize:13,padding:"10px 14px",borderRadius:10}}>
+          <option value="">-- Không kết đôi --</option>
+          {checkedIn.filter(p=>safe(p.name).toLowerCase()!==safe(form.name).toLowerCase().trim()).map(p=>(
+            <option key={p.id} value={p.id}>{safe(p.name)} ({p.gender==="M"?"Nam":"Nữ"}, {p.skill})</option>
+          ))}
+        </select>
+      </div>}
+      {err&&<div style={{padding:"12px 16px",borderRadius:10,background:G.red+"15",border:`1px solid ${G.red}44`,color:G.red,fontSize:13,fontWeight:600,marginBottom:14}}>⚠️ {err}</div>}
+      <button onClick={submit} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>✅ Xác nhận & Vào hàng chờ</button>
+    </div>
+  </div>;
+
+  if(step==="success"&&submitted) return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{width:"100%",maxWidth:440,textAlign:"center"}}>
+      <div style={{fontSize:64,marginBottom:8}}>🎉</div>
+      <div style={{fontSize:22,fontWeight:900,color:G.accent,marginBottom:4}}>Check in thành công!</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:16}}>{safe(submitted.name)}</div>
+      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
+        <GBadge gender={submitted.gender}/><SBadge skill={submitted.skill}/><DBadge dtype={submitted.dtype}/>
+        {submitted.isNew&&<Chip label="🆕 Mới" color={G.gold}/>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+        <div style={{padding:"16px",borderRadius:12,background:G.accent+"15",border:`1px solid ${G.accent}44`,textAlign:"center"}}>
+          <div style={{fontSize:9,color:G.muted,marginBottom:4}}>TRẠNG THÁI</div>
+          <div style={{fontSize:16,fontWeight:900,color:G.accent}}>⏳ Chờ đấu</div>
+        </div>
+        <div style={{padding:"16px",borderRadius:12,background:G.purple+"15",border:`1px solid ${G.purple}44`,textAlign:"center"}}>
+          <div style={{fontSize:9,color:G.muted,marginBottom:4}}>ĐANG CHỜ</div>
+          <div style={{fontSize:16,fontWeight:900,color:G.purple}}>{players.filter(p=>p?.checkedIn).length} người</div>
+        </div>
+      </div>
+      <div style={{padding:"12px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:20,fontSize:12,color:G.muted,lineHeight:1.7}}>Hỏi Host khi sân trống 🏓</div>
+      <div style={{display:"flex",gap:10,alignItems:"center",justifyContent:"center",marginBottom:16}}>
+        {courts.map(c=><div key={c.id} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:7,background:c.match?G.red+"15":G.accent+"15",border:`1px solid ${c.match?G.red+"44":G.accent+"44"}`}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:c.match?G.red:G.accent}}/>
+          <span style={{fontSize:10,color:G.text}}>{c.name.replace("Sân ","S")}</span>
+        </div>)}
+      </div>
+      <div style={{marginBottom:16,fontSize:12,color:G.dim}}>Reset sau <span style={{color:G.accent,fontWeight:700}}>{autoReset}s</span></div>
+      <button onClick={resetKiosk} style={{...bP,width:"100%",padding:"14px",fontSize:14,borderRadius:12}}>🔄 Người tiếp theo</button>
+    </div>
+  </div>;
+  return null;
+}
+
+// ══════════════════════════════════════
+// MAIN TABS
+// ══════════════════════════════════════
+const TABS=[
+  {id:"dashboard",l:"📊 Dashboard"},
+  {id:"courts",l:"🏟️ 5 Sân"},
+  {id:"players",l:"👥 Người chơi"},
+  {id:"queue",l:"⚔️ Queue"},
+  {id:"leaderboard",l:"🏆 Xếp hạng"},
+  {id:"history",l:"📋 Lịch sử"},
+  {id:"analytics",l:"📈 Analytics"},
+  {id:"kiosk",l:"📲 Kiosk"},
+];
+
+function DashTab({courts,players,queue,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent}){
+  const ci=players.filter(p=>p?.checkedIn).length;
+  return <div>
+    {activeEvent&&<div style={{padding:"8px 14px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:G.red,boxShadow:`0 0 8px ${G.red}`}}/>
+      <div><span style={{fontSize:12,fontWeight:800,color:G.accent}}>🗓️ {activeEvent.name}</span>{activeEvent.location&&<span style={{fontSize:10,color:G.muted,marginLeft:8}}>📍 {activeEvent.location}</span>}</div>
+      <div style={{marginLeft:"auto",fontSize:10,color:G.muted}}>{activeEvent.date}</div>
+    </div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:11}}>
+      {[{i:"👥",l:"Tổng",v:players.length,c:G.blue},{i:"✅",l:"Check-in",v:ci,c:G.accent},{i:"⏳",l:"Chờ",v:available.length,c:G.purple},{i:"🔴",l:"Live",v:courts.filter(c=>c.match).length,c:G.gold},{i:"📋",l:"Queue",v:queue.length,c:G.purple},{i:"🏆",l:"Kết thúc",v:history.filter(h=>h.eventId===activeEvent?.id).length,c:"#34d399"}].map(s=>(
+        <div key={s.l} style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 7px",textAlign:"center"}}>
+          <div style={{fontSize:16,marginBottom:2}}>{s.i}</div><div style={{fontSize:24,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div><div style={{fontSize:8,color:G.muted,marginTop:2}}>{s.l}</div>
+        </div>
+      ))}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8,marginBottom:11,background:G.panel,border:`1px solid ${G.border}`,borderRadius:11,padding:11}}>
+      <div>
+        <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ QUEUE</div>
+        {!queue.length?<div style={{color:G.dim,fontSize:11}}>Queue trống</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>{queue.slice(0,5).map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign}/>)}</div>}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:130}}>
+        <button onClick={onQR} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11,padding:"9px 12px"}}>📷 QR Check-in</button>
+        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`,fontSize:11}}>✏️ Custom</button>
+        <button onClick={genQ} style={{...bS,fontSize:11}}>🎲 Tạo trận</button>
+        <button onClick={autoAss} style={{...bP,fontSize:11,padding:"9px 12px"}}>▶ Auto gán</button>
+      </div>
+    </div>
+    <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:7}}>🏟️ 5 SÂN</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+      {courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign}/>)}
+    </div>
+    {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,margin:"14px 0 7px"}}>📋 KẾT QUẢ GẦN ĐÂY</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
+        {history.filter(h=>h.eventId===activeEvent?.id).slice(0,4).map(h=><HCard key={h.id} h={h}/>)}
+      </div>
+    </>}
+  </div>;
+}
+
+function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR}){
+  const [search,setSearch]=useState(""),[fG,setFG]=useState("all"),[fS,setFS]=useState("all");
+  const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("kootoro");
+  let list=[...players].filter(p=>p?.name);
+  const sq=safe(search).toLowerCase();
+  if(sq)list=list.filter(p=>safe(p.name).toLowerCase().includes(sq));
+  if(fG!=="all")list=list.filter(p=>p.gender===fG);if(fS!=="all")list=list.filter(p=>p.skill===fS);
+  if(fSt==="in")list=list.filter(p=>p.checkedIn);else if(fSt==="out")list=list.filter(p=>!p.checkedIn);
+  else if(fSt==="playing")list=list.filter(p=>playIds.has(p.id));else if(fSt==="couple")list=list.filter(p=>p.coupleId);
+  list.sort((a,b)=>{if(sort==="kootoro")return kootoro(b,history)-kootoro(a,history);if(sort==="elo")return(b.elo||0)-(a.elo||0);if(sort==="name")return safe(a.name).localeCompare(safe(b.name));return(b.gamesPlayed||0)-(a.gamesPlayed||0);});
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <div style={{fontSize:14,fontWeight:800,color:G.text}}>👥 Người chơi ({players.length})</div>
+      <div style={{display:"flex",gap:5}}>
+        <button onClick={onQR} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11}}>📷 QR</button>
+        <button onClick={onCouple} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`}}>💑</button>
+        <button onClick={onAdd} style={bP}>+ Thêm</button>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:5,marginBottom:9,flexWrap:"wrap"}}>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tên..." style={{...iS,maxWidth:150}}/>
+      <select value={fG} onChange={e=>setFG(e.target.value)} style={{...iS,maxWidth:80}}><option value="all">Tất cả</option><option value="M">♂ Nam</option><option value="F">♀ Nữ</option></select>
+      <select value={fS} onChange={e=>setFS(e.target.value)} style={{...iS,maxWidth:100}}><option value="all">Mọi trình</option>{SKILL_LEVELS.map(s=><option key={s} value={s}>{s}</option>)}</select>
+      <select value={fSt} onChange={e=>setFSt(e.target.value)} style={{...iS,maxWidth:115}}><option value="all">Tất cả</option><option value="in">✅ Check-in</option><option value="out">❌ Chưa vào</option><option value="playing">🔴 Đang đấu</option><option value="couple">💑 Couple</option></select>
+      <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="kootoro">↓ Kootoro</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
+    </div>
+    <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:"155px 48px 58px 88px 55px 44px 46px 68px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
+        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div>ACTION</div>
+      </div>
+      {list.map((p,i)=>{
+        const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=Math.round(kootoro(p,history)*10)/10;
+        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"155px 48px 58px 88px 55px 44px 46px 68px 76px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
+          <div style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}</div>
+          <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
+          <div>{playing?<Chip label="🔴 Đấu" color={G.red}/>:p.checkedIn?<Chip label="⏳ Chờ" color={G.purple}/>:<Chip label="❌ Out" color={G.muted}/>}</div>
+          <div style={{fontSize:12,fontWeight:900,color:SKILL_COLOR[p.skill]||G.muted}}>{p.elo||"?"}</div>
+          <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
+          <div style={{fontSize:10,color:wr>=50?G.accent:G.red,fontWeight:700}}>{wr}%</div>
+          <div style={{fontSize:11,fontWeight:800,color:k>0?G.gold:k<0?G.red:G.muted}}>{k>0?"+":""}{k}</div>
+          <div><button onClick={()=>onToggle(p.id)} style={{padding:"3px 8px",borderRadius:5,border:"none",cursor:"pointer",fontWeight:700,fontSize:9,background:p.checkedIn?G.accent+"22":`linear-gradient(135deg,${G.accent},${G.blue})`,color:p.checkedIn?G.accent:"#fff"}}>{p.checkedIn?"✅ IN":"Check In"}</button></div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+function QueueTab({queue,setQueue,courts,available,history,elapsed,onScore,onAssign,genQ,autoAss,onCustom}){
+  const playIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
+      <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚔️ Queue & Live</div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`}}>✏️ Custom</button>
+        <button onClick={genQ} style={bS}>🎲 Tạo trận</button>
+        <button onClick={autoAss} style={bP}>▶ Auto gán</button>
+      </div>
+    </div>
+    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:11,padding:11,marginBottom:11}}>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:7}}>⏳ CHỜ ({available.length})</div>
+      {!available.length?<div style={{color:G.dim,fontSize:11}}>Tất cả đang đấu</div>:
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {available.sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=>(
+          <div key={p.id} style={{padding:"4px 9px",borderRadius:7,background:G.card,border:`1px solid ${(p.gamesPlayed||0)===0?G.gold+"66":G.border}`,display:"flex",alignItems:"center",gap:5}}>
+            {(p.gamesPlayed||0)===0&&<span style={{fontSize:9,color:G.gold}}>🆕</span>}
+            <span style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</span><SBadge skill={p.skill}/><GBadge gender={p.gender}/>
+          </div>
+        ))}
+      </div>}
+    </div>
+    {queue.length>0&&<div style={{marginBottom:11}}>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE ({queue.length})</div>
+      <div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign} onRemove={()=>setQueue(p=>p.filter((_,j)=>j!==i))}/>)}</div>
+    </div>}
+    <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>🔴 ĐANG ĐẤU</div>
+    {!courts.filter(c=>c.match).length?<div style={{color:G.dim,fontSize:11}}>Chưa có</div>:
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:9}}>
+      {courts.filter(c=>c.match).map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={[]} onScore={onScore} onAssign={onAssign}/>)}
+    </div>}
+  </div>;
+}
+
+// ══════════════════════════════════════
+// MAIN APP
+// ══════════════════════════════════════
+export default function App(){
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [me,       setMe]       = useState(null);
+  const [accounts, setAccounts] = useState(defaultAccounts);
+  const [players,  setPlayers]  = useState(()=>buildSeed(null));
+  const [history,  setHistory]  = useState([]);
+  const [courts,   setCourts]   = useState(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
+  const [queue,    setQueue]    = useState([]);
+  const [events,   setEvents]   = useState([]); // [{id,name,date,location,note,createdAt}]
+  const [activeEventId, setActiveEventId] = useState(null);
+  const [tab,      setTab]      = useState("dashboard");
+  const [modal,    setModal]    = useState(null); // qr|custom|couple|admin|newEvent
+  const [scoreTarget,setScoreTarget] = useState(null);
+  const [tvMode,   setTvMode]   = useState(false);
+  const [toast,    setToast]    = useState(null);
+  const [elapsed,  setElapsed]  = useState({});
+  const tickRef=useRef(), saveRef=useRef();
+
+  // ── LOAD tất cả data khi khởi động
+  useEffect(()=>{
+    (async()=>{
+      const [meta, plData, active] = await Promise.all([
+        DB.get(SKEY_META),
+        DB.get(SKEY_PLAYERS),
+        DB.get(SKEY_ACTIVE),
+      ]);
+      if(meta?.accounts) setAccounts(meta.accounts);
+      if(meta?.events)   setEvents(meta.events);
+      if(plData?.players?.length) setPlayers(buildSeed(plData.players));
+
+      // Load active event data
+      if(active?.eventId){
+        setActiveEventId(active.eventId);
+        const evData = await DB.get(SKEY_EVENT(active.eventId));
+        if(evData?.history) setHistory(evData.history);
+        // Restore courts & queue (trạng thái live)
+        if(active.courts) setCourts(active.courts.map(c=>({
+          ...c,
+          // Tính lại startedAt để timer đúng sau khi reload
+          startedAt: c.match&&c._startedAt ? Date.now()-(c._elapsed||0)*1000 : null
+        })));
+        if(active.queue)  setQueue(active.queue);
+      }
+      setLoading(false);
+    })();
+  },[]);
+
+  // ── SAVE IMMEDIATE — chia nhỏ để tránh 5MB limit
+  const saveAll = useCallback(async(newState={})=>{
+    const st = {accounts,events,players,history,courts,queue,activeEventId,...newState};
+    setSaving(true);
+    await Promise.all([
+      DB.set(SKEY_META, {accounts:st.accounts, events:st.events}),
+      DB.set(SKEY_PLAYERS, {players: st.players.map(p=>({
+        id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,dtype:p.dtype,
+        coupleId:p.coupleId||null,coupleType:p.coupleType||null,
+        gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,
+        lastPartners:p.lastPartners||[],createdAt:p.createdAt
+      }))}),
+      st.activeEventId
+        ? DB.set(SKEY_EVENT(st.activeEventId), {history:st.history.slice(0,500)})
+        : Promise.resolve(),
+      DB.set(SKEY_ACTIVE, {
+        eventId: st.activeEventId,
+        courts: st.courts.map(c=>({
+          ...c,
+          _startedAt: c.startedAt,
+          _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0
+        })),
+        queue: st.queue,
+      }),
+    ]);
+    setSaving(false);
+  },[accounts,events,players,history,courts,queue,activeEventId]);
+
+  // Auto-save sau mỗi thay đổi (debounce 800ms)
+  useEffect(()=>{
+    if(!me||me.role===ROLES.VIEWER) return;
+    clearTimeout(saveRef.current);
+    saveRef.current=setTimeout(()=>saveAll(),800);
+  },[players,history,accounts,events,courts,queue,activeEventId,me]);
+
+  // Timer cho sân
+  useEffect(()=>{
+    tickRef.current=setInterval(()=>{
+      setElapsed(prev=>{const n={...prev};courts.forEach(c=>{if(c.match&&c.startedAt)n[c.id]=Math.floor((Date.now()-c.startedAt)/1000);});return n;});
+    },1000);
+    return()=>clearInterval(tickRef.current);
+  },[courts]);
+
+  const playIds   = new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+  const available = players.filter(p=>p&&p.checkedIn&&!playIds.has(p.id));
+  const activeEvent = events.find(e=>e.id===activeEventId)||null;
+  const showT=(msg,type="ok")=>setToast({msg,type});
+
+  // ── EVENT MANAGEMENT
+  const createEvent = (ev) => {
+    const newEvents = [...events, ev];
+    setEvents(newEvents);
+    setActiveEventId(ev.id);
+    setHistory([]); // reset history for new event
+    setQueue([]);
+    setPlayers(p=>p.map(x=>({...x,checkedIn:false}))); // reset checkins
+    showT(`🗓️ Event "${ev.name}" đã tạo! Đang bắt đầu...`);
+    saveAll({events:newEvents, activeEventId:ev.id, history:[], queue:[]});
+  };
+  const editEvent = (ev) => {
+    const newEvents = events.map(e=>e.id===ev.id?ev:e);
+    setEvents(newEvents);
+    showT("Event đã cập nhật ✏️");
+    saveAll({events:newEvents});
+  };
+  const endEvent = () => {
+    if(!activeEvent) return;
+    showT(`Event "${activeEvent.name}" kết thúc. Lịch sử đã lưu 💾`);
+    setActiveEventId(null);
+    setHistory([]);
+    setQueue([]);
+    setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
+    saveAll({activeEventId:null, history:[], queue:[]});
+  };
+
+  const handleRegister=data=>{
+    setPlayers(prev=>{
+      const ex=prev.find(p=>p.id===data.id);
+      let upd=ex?prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true}:p):[...prev,{...data,checkedIn:true}];
+      if(data.coupleWithId&&data.coupleId) upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
+      return upd;
+    });
+    showT(`${safe(data.name)} đã check in! 🎉`);
+  };
+
+  const genQueue=()=>{
+    if(available.length<4){showT("Cần ít nhất 4 người!","warn");return;}
+    const newM=[],used=new Set();
+    const cm={};available.forEach(p=>{if(p?.coupleId){if(!cm[p.coupleId])cm[p.coupleId]=[];cm[p.coupleId].push(p);}});
+    Object.values(cm).forEach(pair=>{
+      if(pair.length===2&&!used.has(pair[0].id)&&!used.has(pair[1].id)){
+        const others=available.filter(p=>!used.has(p.id)&&p.id!==pair[0].id&&p.id!==pair[1].id);
+        if(others.length>=2){const o1=others[rng(0,Math.min(2,others.length-1))],o2=others.filter(p=>p.id!==o1.id)[rng(0,Math.max(0,Math.min(2,others.length-2)))];
+          if(o1&&o2){const dt=pair[0].gender!==pair[1].gender&&o1.gender!==o2.gender?"mixed":"any";newM.push({team1:[pair[0],pair[1]],team2:[o1,o2],dtype:dt,coupleMatch:true});[pair[0].id,pair[1].id,o1.id,o2.id].forEach(id=>used.add(id));}}
+      }
+    });
+    for(const dt of["mixed","male","female","any"]){const pool=available.filter(p=>!used.has(p.id));if(pool.length<4)break;const m=genMatch(pool,history,dt);if(m){newM.push(m);[...m.team1,...m.team2].forEach(p=>used.add(p.id));}}
+    if(!newM.length){showT("Không tạo được trận!","warn");return;}
+    setQueue(p=>[...p,...newM]);showT(`Đã thêm ${newM.length} trận ⚡`);
+  };
+
+  const assign=(cid,mdata)=>{
+    setCourts(p=>p.map(c=>c.id===cid?{...c,match:{...mdata},startedAt:Date.now()}:c));
+    setQueue(p=>p.filter(q=>q!==mdata));
+    showT(`Trận bắt đầu tại ${courts.find(c=>c.id===cid)?.name}! 🏓`);
+  };
+  const autoAssign=()=>{
+    const free=courts.filter(c=>!c.match);
+    if(!free.length){showT("Không có sân trống!","warn");return;}
+    if(!queue.length){showT("Queue trống!","warn");return;}
+    let q=[...queue];
+    free.forEach(c=>{if(!q.length)return;const m=q.shift();setCourts(p=>p.map(x=>x.id===c.id?{...x,match:m,startedAt:Date.now()}:x));});
+    setQueue(q);showT("Đã gán ▶");
+  };
+
+  const handleScore=(w,sw,sl)=>{
+    if(!activeEvent){showT("Tạo Event trước khi nhập điểm!","warn");return;}
+    const court=courts.find(c=>c.id===scoreTarget);if(!court?.match)return;
+    const m=court.match,wT=(w===1?m.team1:m.team2).filter(Boolean),lT=(w===1?m.team2:m.team1).filter(Boolean);
+    if(!wT.length||!lT.length)return;
+    const delta=Math.round(28*(1-(1/(1+Math.pow(10,(teamElo(lT)-teamElo(wT))/400)))));
+    const t10=m.team1?.[0],t11=m.team1?.[1],t20=m.team2?.[0],t21=m.team2?.[1];
+    const np={};if(t10&&t11){np[t10.id]=t11.id;np[t11.id]=t10.id;}if(t20&&t21){np[t20.id]=t21.id;np[t21.id]=t20.id;}
+    setPlayers(p=>p.map(x=>{
+      const isW=wT.some(v=>v.id===x.id),isL=lT.some(v=>v.id===x.id);
+      if(!isW&&!isL)return x;
+      const lp=np[x.id]?[np[x.id],...(x.lastPartners||[])].slice(0,4):x.lastPartners||[];
+      return {...x,elo:x.elo+(isW?delta:-delta),gamesPlayed:(x.gamesPlayed||0)+1,wins:(x.wins||0)+(isW?1:0),lastPartners:lp};
+    }));
+    setHistory(p=>[{
+      id:uid(),eventId:activeEventId,courtId:scoreTarget,dtype:m.dtype,
+      team1:m.team1.filter(Boolean),team2:m.team2.filter(Boolean),
+      winner:w,scoreWinner:sw,scoreLoser:sl,
+      score:`${w===1?sw:sl}-${w===1?sl:sw}`,eloDelta:delta,time:nowStr()
+    },...p]);
+    setCourts(p=>p.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c));
+    setScoreTarget(null);
+    showT(`${wT.filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join(" & ")} thắng ${sw}-${sl}! ±${delta} ELO`);
+  };
+
+  const toggleCI=id=>{
+    const p=players.find(p=>p.id===id);if(!p)return;
+    setPlayers(pp=>pp.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x));
+    showT(`${safe(p.name)} ${p.checkedIn?"rời session":"check in ✅"}`);
+  };
+
+  const CSS=`@keyframes tIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}*{box-sizing:border-box;}input,select{outline:none;}input::placeholder{color:${G.muted};}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-thumb{background:${G.border};border-radius:3px;}button:active{transform:scale(.97);}`;
+  const isSA=me?.role===ROLES.SA;
+  const scoreMatch=scoreTarget?courts.find(c=>c.id===scoreTarget)?.match:null;
+
+  if(!me) return <><style>{CSS}</style><Login accounts={accounts} onLogin={setMe} loading={loading}/></>;
+  if(me.role===ROLES.VIEWER) return <><style>{CSS}</style>
+    {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+    <ViewerMode players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} onLogout={()=>setMe(null)}/></>;
+
+  return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+    <style>{CSS}</style>
+    {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+
+    {/* MODALS */}
+    {modal==="qr"       &&<QRModal players={players} onRegister={handleRegister} onClose={()=>setModal(null)}/>}
+    {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
+    {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
+    {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT}/>}
+    {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
+    {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
+    {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
+
+    {/* HEADER */}
+    <header style={{height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🏓</div>
+        <div>
+          <div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1,display:"flex",alignItems:"center",gap:6}}>
+            PICKLEBALL SOCIAL <SaveDot saving={saving}/>
+          </div>
+          <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{safe(me.name).toUpperCase()} · {activeEvent?activeEvent.name:"Chưa có event"}</div>
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+        <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
+        <Chip label={`🔴 ${courts.filter(c=>c.match).length} live`} color={G.gold}/>
+        <RBadge role={me.role}/>
+        <span onClick={()=>setModal("admin")} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:G.gold+"20",color:G.gold,border:`1px solid ${G.gold}40`,fontWeight:700,cursor:"pointer"}}>👁 {accounts?.viewerCode||"???"}</span>
+        {/* EVENT SWITCHER */}
+        {activeEvent
+          ? <div style={{display:"flex",gap:4,alignItems:"center",padding:"3px 9px",borderRadius:7,background:G.accent+"15",border:`1px solid ${G.accent}44`}}>
+              <span style={{fontSize:10,color:G.accent,fontWeight:700}}>🗓️ {activeEvent.name}</span>
+              <button onClick={endEvent} title="Kết thúc event" style={{padding:"1px 6px",borderRadius:4,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,cursor:"pointer",fontSize:9,fontWeight:700}}>✕</button>
+            </div>
+          : <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:"6px 12px"}}>🗓️ Tạo Event</button>
+        }
+        <button onClick={()=>setTvMode(true)} style={bS}>📺</button>
+        <button onClick={()=>setModal("couple")} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`}}>💑</button>
+        <button onClick={()=>setModal("qr")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11}}>📷 QR</button>
+        <button onClick={()=>setTab("kiosk")} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:11,padding:"7px 12px"}}>📲 Kiosk</button>
+        {isSA&&<button onClick={()=>setModal("admin")} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>⚙️</button>}
+        <button onClick={()=>setMe(null)} style={bS}>← Đăng xuất</button>
+      </div>
+    </header>
+
+    {/* EVENT ALERT nếu chưa có */}
+    {!activeEvent&&<div style={{background:`linear-gradient(90deg,${G.gold}18,${G.purple}18)`,borderBottom:`1px solid ${G.gold}44`,padding:"8px 16px",display:"flex",alignItems:"center",gap:10}}>
+      <span style={{fontSize:11,color:G.gold}}>⚠️ Chưa có event nào đang chạy.</span>
+      <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:"5px 14px"}}>🗓️ Tạo Event ngay</button>
+      <span style={{fontSize:10,color:G.dim}}>Tạo event để lưu lịch sử trận đấu theo ngày</span>
+    </div>}
+
+    {/* NAV */}
+    <nav style={{display:"flex",gap:2,padding:"4px 12px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
+      {TABS.map(t=>{const isK=t.id==="kiosk",isH=t.id==="history";const ac=isK?G.purple:isH?G.gold:G.accent;const act=tab===t.id;return <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:act?ac+"22":"transparent",color:act?ac:G.muted,borderBottom:act?`2px solid ${ac}`:"2px solid transparent"}}>{t.l}</button>;})}
+    </nav>
+
+    {/* MAIN CONTENT */}
+    <main style={{padding:"12px 14px",maxWidth:1800,margin:"0 auto"}}>
+      {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent}/>}
+      {tab==="courts"     &&<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign}/>)}</div>
+        {queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE</div><div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={assign}/>)}</div></>}
+      </div>}
+      {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")}/>}
+      {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
+      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)}/>}
+      {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
+      {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
+      {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
+    </main>
+  </div>;
+}
