@@ -25,31 +25,62 @@
       appId:             "1:864752070261:web:342f9cdee8f5df0d38523c"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getDatabase(app);
     const LS_KEY  = "pb_v6_save";
     const FB_PATH = "pickleball/data";
 
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    // Gán STORE thật ngay lập tức — trước khi dispatch event
     window.STORE = {
       save(data) {
         try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
         try { set(ref(db, FB_PATH), { ...data, _updatedAt: Date.now() }); } catch(e) {}
       },
       async load() {
-        try { const s = localStorage.getItem(LS_KEY); if(s) return JSON.parse(s); } catch {}
+        // 1. Thử localStorage trước (nhanh, offline-safe)
+        try {
+          const s = localStorage.getItem(LS_KEY);
+          if(s) {
+            const d = JSON.parse(s);
+            if(d && typeof d === 'object') return d;
+          }
+        } catch(e) {}
+        // 2. Fallback Firebase
         try {
           const snap = await get(ref(db, FB_PATH));
-          if(snap.exists()) { const d = snap.val(); localStorage.setItem(LS_KEY, JSON.stringify(d)); return d; }
-        } catch(e) { console.warn('Firebase load:', e); }
+          if(snap.exists()) {
+            const d = snap.val();
+            try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e) {}
+            return d;
+          }
+        } catch(e) { console.warn('Firebase load error:', e); }
         return null;
       },
       subscribe(cb) {
-        return onValue(ref(db, FB_PATH), snap => { if(snap.exists()) cb(snap.val()); });
+        return onValue(ref(db, FB_PATH), snap => {
+          if(snap.exists()) {
+            const d = snap.val();
+            try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e) {}
+            cb(d);
+          }
+        });
       }
     };
-    console.log('Firebase ready ✅');
-    window._fbReady = true;
-    document.dispatchEvent(new Event('fb-ready'));
+
+    // Load data ngay bây giờ và lưu vào window.__initialData
+    // App sẽ đọc từ đây thay vì gọi STORE.load() async
+    (async () => {
+      try {
+        window.__initialData = await window.STORE.load();
+        console.log('Data loaded ✅', window.__initialData ? 'has data' : 'empty');
+      } catch(e) {
+        console.warn('Initial load failed:', e);
+        window.__initialData = null;
+      }
+      window._fbReady = true;
+      document.dispatchEvent(new Event('fb-ready'));
+    })();
   </script>
 </head>
 <body>
@@ -1442,56 +1473,56 @@ function App(){
   const [history,  setHistory]  = useState([]);
   const [courts,   setCourts]   = useState(()=>Array.from({length:5},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
   const [queue,    setQueue]    = useState([]);
-  const [events,   setEvents]   = useState([]); // [{id,name,date,location,note,createdAt}]
+  const [events,   setEvents]   = useState([]);
   const [activeEventId, setActiveEventId] = useState(null);
   const [numCourts,setNumCourts]= useState(5);
   const [tab,      setTab]      = useState("dashboard");
-  const [modal,    setModal]    = useState(null); // qr|custom|couple|admin|newEvent
+  const [modal,    setModal]    = useState(null);
   const [scoreTarget,setScoreTarget] = useState(null);
-  const [subCourt, setSubCourt] = useState(null); // court being subbed
+  const [subCourt, setSubCourt] = useState(null);
   const [editingPlayer,setEditingPlayer] = useState(null);
   const [tvMode,   setTvMode]   = useState(false);
   const [toast,    setToast]    = useState(null);
   const [elapsed,  setElapsed]  = useState({});
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
 
-  // ── LOAD — localStorage first → Firebase fallback, subscribe realtime
-  useEffect(()=>{
-    STORE.load().then(db=>{
-      if(db){
-        if(db.accounts) setAccounts(db.accounts);
-        if(db.events?.length) setEvents(db.events);
-        if(db.players?.length) setPlayers(buildSeed(db.players));
-        if(db.history) setHistory(db.history);
-        if(db.activeEventId) setActiveEventId(db.activeEventId);
-        if(typeof db.numCourts==="number") setNumCourts(db.numCourts);
-        if(db.queue) setQueue(db.queue);
-        if(db.courts?.length){
-          setCourts(db.courts.map(c=>({
-            ...c,
-            startedAt: c.match && c._elapsed ? Date.now()-c._elapsed*1000 : null
-          })));
-        }
-      }
-      setLoading(false);
-    });
-    // Firebase realtime — Viewer + CheckinPage nhận update tự động
-    if(STORE.subscribe){
-      unsubRef.current = STORE.subscribe(db=>{
-        if(!db) return;
-        if(db.players?.length) setPlayers(buildSeed(db.players));
-        if(db.courts?.length) setCourts(db.courts.map(c=>({...c,startedAt:c.match&&c._elapsed?Date.now()-c._elapsed*1000:null})));
-        if(db.queue) setQueue(db.queue);
-        if(db.history) setHistory(db.history);
-        if(db.events) setEvents(db.events);
-        if(db.activeEventId!==undefined) setActiveEventId(db.activeEventId);
-        if(typeof db.numCourts==="number") setNumCourts(db.numCourts);
-      });
-    }
-    return ()=>{ if(unsubRef.current) unsubRef.current(); };
-  },[]);
+  // Helper: áp dụng data từ DB vào state
+  const applyDb = useCallback((db) => {
+    if(!db || typeof db !== 'object') return;
+    if(db.accounts && db.accounts.admins) setAccounts(db.accounts);
+    if(db.events?.length) setEvents(db.events);
+    if(db.players?.length) setPlayers(buildSeed(db.players));
+    if(db.history?.length) setHistory(db.history);
+    if(db.activeEventId) setActiveEventId(db.activeEventId);
+    if(typeof db.numCourts === 'number') setNumCourts(db.numCourts);
+    if(db.queue?.length) setQueue(db.queue);
+    if(db.courts?.length) setCourts(db.courts.map(c=>({
+      ...c, startedAt: c.match && c._elapsed ? Date.now()-c._elapsed*1000 : null
+    })));
+  }, []);
 
-  // ── SAVE — ghi vào localStorage ngay, không mất data khi reload
+  // ── LOAD: dùng window.__initialData (đã load xong trước khi app mount)
+  useEffect(()=>{
+    const db = window.__initialData;
+    if(db) {
+      console.log('✅ Applying initial data');
+      applyDb(db);
+    } else {
+      console.log('⚠️ No initial data — fresh start');
+    }
+    setLoading(false);
+
+    // Subscribe Firebase realtime — tự động sync khi Admin/Host thay đổi data
+    const unsub = window.STORE?.subscribe((db) => {
+      console.log('🔄 Firebase realtime update');
+      applyDb(db);
+    });
+    if(unsub) unsubRef.current = unsub;
+
+    return () => { if(unsubRef.current) unsubRef.current(); };
+  }, [applyDb]);
+
+  // ── SAVE — ghi vào localStorage + Firebase mỗi khi data thay đổi
   const saveAll = useCallback((extra={})=>{
     const st = {accounts,events,players,history,courts,queue,activeEventId,numCourts,...extra};
     setSaving(true);
