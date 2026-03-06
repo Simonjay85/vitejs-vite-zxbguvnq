@@ -2,433 +2,321 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#060c18"/>
   <title>Check In 🏓 Pickleball</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #060c18; font-family: 'Segoe UI', system-ui, sans-serif; }
-    input, select, button { font-family: inherit; }
-    input:focus { outline: none; }
-    button:active { transform: scale(.97); }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    body{background:#060c18;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+    input,button{font-family:inherit;-webkit-appearance:none;}
+    input:focus{outline:none;}
+    button:active{transform:scale(.96);transition:transform .1s;}
   </style>
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-    import { getDatabase, ref, onValue, set, get } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
-
-    const firebaseConfig = {
-      apiKey:            "AIzaSyASueh9zAWlvffRyADA_vJXU8P8uwNJlV4",
-      authDomain:        "pickleballhost-8bca7.firebaseapp.com",
-      databaseURL:       "https://pickleballhost-8bca7-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId:         "pickleballhost-8bca7",
-      storageBucket:     "pickleballhost-8bca7.firebasestorage.app",
-      messagingSenderId: "864752070261",
-      appId:             "1:864752070261:web:342f9cdee8f5df0d38523c"
+    import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+    const CFG={apiKey:"AIzaSyASueh9zAWlvffRyADA_vJXU8P8uwNJlV4",authDomain:"pickleballhost-8bca7.firebaseapp.com",databaseURL:"https://pickleballhost-8bca7-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"pickleballhost-8bca7",storageBucket:"pickleballhost-8bca7.firebasestorage.app",messagingSenderId:"864752070261",appId:"1:864752070261:web:342f9cdee8f5df0d38523c"};
+    const db=getDatabase(initializeApp(CFG));
+    const dbRef=ref(db,"pickleball/data");
+    window.FB={
+      async load(){try{const s=await get(dbRef);return s.exists()?s.val():null;}catch(e){console.warn(e);return null;}},
+      async save(d){try{await set(dbRef,{...d,_updatedAt:Date.now()});return true;}catch(e){console.warn(e);return false;}},
+      subscribe(cb){return onValue(dbRef,s=>{if(s.exists())cb(s.val());})}
     };
-
-    const app = initializeApp(firebaseConfig);
-    const db  = getDatabase(app);
-    const FB_PATH = "pickleball/data";
-
-    window.FB = {
-      async load() {
-        try {
-          const snap = await get(ref(db, FB_PATH));
-          return snap.exists() ? snap.val() : null;
-        } catch(e) { console.warn(e); return null; }
-      },
-      async save(data) {
-        try { await set(ref(db, FB_PATH), { ...data, _updatedAt: Date.now() }); return true; }
-        catch(e) { console.warn(e); return false; }
-      }
-    };
-    window._fbReady = true;
-    document.dispatchEvent(new Event('fb-ready'));
+    (async()=>{
+      try{window.__data=await window.FB.load();console.log('Data:',window.__data?'OK':'empty');}
+      catch(e){console.warn(e);window.__data=null;}
+      window._fbOK=true;
+      document.dispatchEvent(new Event('fb-ok'));
+    })();
   </script>
 </head>
 <body>
-<div id="root"></div>
-
+<div id="loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;">
+  <div style="font-size:52px">🏓</div>
+  <div style="color:#4a6480;font-size:13px;letter-spacing:2px;font-family:sans-serif">ĐANG KẾT NỐI...</div>
+</div>
+<div id="root" style="display:none"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-
+<!-- QRCode generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useCallback } = React;
+const {useState,useEffect,useRef}=React;
+const G={bg:"#060c18",panel:"#0b1524",card:"#0f1e33",border:"#172840",accent:"#00c9a7",gold:"#f59e0b",red:"#f43f5e",blue:"#3b82f6",purple:"#a78bfa",pink:"#f472b6",text:"#dde6f5",muted:"#4a6480",dim:"#223044"};
+const SKILLS=["2.0","2.5","3.0","3.5","3.5+"];
+const SC={"2.0":"#94a3b8","2.5":"#60a5fa","3.0":"#34d399","3.5":"#f59e0b","3.5+":"#f43f5e"};
+const SD={"2.0":"Mới","2.5":"Cơ bản","3.0":"T.bình","3.5":"Khá","3.5+":"Nâng cao"};
+const SE={"2.0":1050,"2.5":1160,"3.0":1290,"3.5":1420,"3.5+":1570};
+const DT=[{val:"mixed",label:"⚥ Nam-Nữ",color:"#a78bfa"},{val:"male",label:"♂ Đôi Nam",color:"#60a5fa"},{val:"female",label:"♀ Đôi Nữ",color:"#f472b6"},{val:"any",label:"⭐ Mix",color:"#00c9a7"}];
+const uid=()=>Math.random().toString(36).slice(2,9).toUpperCase();
+const safe=v=>(v&&typeof v==="string")?v:"";
+const sElo=s=>(SE[s]||1200)+Math.floor(Math.random()*60-30);
+const iS=(ex={})=>({background:G.card,border:`1px solid ${G.border}`,borderRadius:12,padding:"13px 16px",color:G.text,fontSize:16,width:"100%",...ex});
+const bP=(ex={})=>({padding:"15px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#fff",fontWeight:700,fontSize:15,width:"100%",...ex});
+const bO={padding:"15px 20px",borderRadius:12,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontWeight:600,fontSize:14,flexShrink:0};
+const Lbl=({t})=><div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1.5,marginBottom:8}}>{t}</div>;
 
-const G = {
-  bg:"#060c18", panel:"#0b1524", card:"#0f1e33", border:"#172840",
-  accent:"#00c9a7", gold:"#f59e0b", red:"#f43f5e", blue:"#3b82f6",
-  purple:"#a78bfa", pink:"#f472b6", text:"#dde6f5", muted:"#4a6480", dim:"#223044"
-};
-
-const SKILL_LEVELS = ["2.0","2.5","3.0","3.5","3.5+"];
-const SKILL_COLOR  = {"2.0":"#94a3b8","2.5":"#60a5fa","3.0":"#34d399","3.5":"#f59e0b","3.5+":"#f43f5e"};
-const SKILL_DESC   = {"2.0":"Mới bắt đầu","2.5":"Cơ bản","3.0":"Trung bình","3.5":"Khá","3.5+":"Nâng cao"};
-const SKILL_ELO    = {"2.0":1050,"2.5":1160,"3.0":1290,"3.5":1420,"3.5+":1570};
-const DTYPE_OPT    = [
-  {val:"mixed", label:"⚥ Nam-Nữ",  color:"#a78bfa"},
-  {val:"male",  label:"♂ Đôi Nam", color:"#60a5fa"},
-  {val:"female",label:"♀ Đôi Nữ", color:"#f472b6"},
-  {val:"any",   label:"⭐ Mix",    color:"#00c9a7"},
-];
-
-const uid   = () => Math.random().toString(36).slice(2,9).toUpperCase();
-const safe  = v => (v && typeof v==="string") ? v : "";
-const skillElo = s => (SKILL_ELO[s]||1200) + Math.floor(Math.random()*100-50);
-
-const iS = {
-  background:G.card, border:`1px solid ${G.border}`, borderRadius:10,
-  padding:"12px 16px", color:G.text, fontSize:15, outline:"none",
-  width:"100%", marginBottom:4
-};
-const bPrimary = (extra={}) => ({
-  padding:"14px", borderRadius:11, border:"none",
-  background:`linear-gradient(135deg,${G.accent},${G.blue})`,
-  color:"#fff", fontWeight:700, cursor:"pointer", fontSize:15,
-  width:"100%", ...extra
-});
-const bSecondary = {
-  padding:"14px 20px", borderRadius:11,
-  border:`1px solid ${G.border}`, background:"transparent",
-  color:G.muted, cursor:"pointer", fontWeight:600, fontSize:14, flexShrink:0
-};
-
-function App() {
-  const [step, setStep]     = useState("loading"); // loading|name|form|success|already
-  const [dbData, setDbData] = useState(null);
-  const [submitting, setSub]= useState(false);
-  const [err, setErr]       = useState("");
-
-  // Name search
-  const [search, setSearch] = useState("");
-  const [matched, setMatched] = useState(null);
-
-  // Form
-  const [form, setForm] = useState({name:"", gender:"M", skill:"3.0", dtype:"any"});
-  const sf = (k,v) => setForm(f=>({...f,[k]:v}));
-
-  // Result
-  const [result, setResult] = useState(null);
-
-  // Wait for Firebase then load
+// ── QR Code component — tự sinh từ URL hiện tại
+function QRBox({url,size=180}){
+  const ref=useRef();
   useEffect(()=>{
-    const init = async () => {
-      const data = await window.FB.load();
-      setDbData(data);
-      setStep("name");
-    };
-    if(window._fbReady) { init(); }
-    else { document.addEventListener('fb-ready', init, {once:true}); }
-  },[]);
-
-  const players = dbData?.players || [];
-  const activeEvent = dbData?.events?.find(e=>e.id===dbData?.activeEventId);
-
-  // Search suggestions
-  const sq = safe(search).toLowerCase();
-  const suggestions = sq.length >= 1
-    ? players.filter(p=>safe(p.name).toLowerCase().includes(sq)).slice(0,6)
-    : [];
-
-  const selectExisting = (p) => {
-    if(p.checkedIn){ setResult(p); setStep("already"); return; }
-    setForm({name:p.name, gender:p.gender||"M", skill:p.skill||"3.0", dtype:p.dtype||"any"});
-    setMatched(p);
-    setStep("form");
-  };
-
-  const goNew = () => {
-    setForm({name:search.trim(), gender:"M", skill:"3.0", dtype:"any"});
-    setMatched(null);
-    setStep("form");
-  };
-
-  const submit = async () => {
-    if(!form.name.trim()){ setErr("Vui lòng nhập tên!"); return; }
-    setSub(true); setErr("");
-    try {
-      const fresh = await window.FB.load();
-      const all   = fresh?.players || [];
-      const ex    = all.find(p=>safe(p.name).toLowerCase()===form.name.trim().toLowerCase());
-
-      if(ex?.checkedIn){ setResult(ex); setStep("already"); setSub(false); return; }
-
-      const now = new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
-      const newP = ex ? {
-        ...ex, gender:form.gender, skill:form.skill, dtype:form.dtype, checkedIn:true
-      } : {
-        id:uid(), name:form.name.trim(), gender:form.gender,
-        skill:form.skill, elo:skillElo(form.skill), baseElo:skillElo(form.skill),
-        dtype:form.dtype, checkedIn:true, gamesPlayed:0, wins:0,
-        lastPartners:[], coupleId:null, coupleType:null,
-        phone:"", note:"", createdAt:now, kootoro:0
-      };
-
-      const updPlayers = ex
-        ? all.map(p=>p.id===ex.id ? newP : p)
-        : [...all, newP];
-
-      const ok = await window.FB.save({...fresh, players:updPlayers});
-      if(ok){ setResult({...newP, isNew:!ex}); setStep("success"); }
-      else  { setErr("Lỗi kết nối Firebase. Thử lại!"); }
-    } catch(e) {
-      console.error(e);
-      setErr("Có lỗi xảy ra: " + e.message);
-    }
-    setSub(false);
-  };
-
-  const reset = () => {
-    setStep("name"); setSearch(""); setMatched(null);
-    setResult(null); setErr("");
-    setForm({name:"", gender:"M", skill:"3.0", dtype:"any"});
-  };
-
-  // ── LOADING
-  if(step==="loading") return (
-    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:G.bg}}>
-      <div style={{fontSize:52}}>🏓</div>
-      <div style={{color:G.muted,fontSize:14,letterSpacing:2}}>ĐANG KẾT NỐI...</div>
-    </div>
-  );
-
-  return (
-    <div style={{minHeight:"100vh",background:G.bg,color:G.text,padding:"24px 16px"}}>
-      <div style={{maxWidth:460,margin:"0 auto"}}>
-
-        {/* ── HEADER */}
-        <div style={{textAlign:"center",marginBottom:28}}>
-          <div style={{width:68,height:68,borderRadius:20,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,margin:"0 auto 14px",boxShadow:`0 8px 24px ${G.accent}40`}}>🏓</div>
-          <div style={{fontSize:24,fontWeight:900,color:"#fff",letterSpacing:1.5}}>CHECK IN</div>
-          {activeEvent
-            ? <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:6,padding:"4px 14px",borderRadius:20,background:G.accent+"18",border:`1px solid ${G.accent}44`}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:G.accent,display:"inline-block"}}/>
-                <span style={{fontSize:12,color:G.accent,fontWeight:700}}>{activeEvent.name}</span>
-              </div>
-            : <div style={{fontSize:11,color:G.muted,marginTop:6}}>Chưa có event nào đang chạy</div>
-          }
-        </div>
-
-        {/* ── STEP: NAME SEARCH */}
-        {step==="name" && (
-          <div style={{background:G.panel,borderRadius:18,padding:24,border:`1px solid ${G.border}`}}>
-            <div style={{fontSize:16,fontWeight:800,color:G.text,marginBottom:18}}>👤 Tìm tên của bạn</div>
-
-            <div style={{position:"relative",marginBottom:16}}>
-              <input
-                value={search}
-                onChange={e=>setSearch(e.target.value)}
-                placeholder="Gõ tên để tìm..."
-                style={{...iS,fontSize:16,paddingLeft:40,marginBottom:0}}
-                autoFocus
-              />
-              <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16,pointerEvents:"none"}}>🔍</span>
-            </div>
-
-            {/* Suggestions */}
-            {suggestions.length > 0 && (
-              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-                {suggestions.map(p=>(
-                  <button key={p.id} onClick={()=>selectExisting(p)}
-                    style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:11,
-                      border:`1px solid ${p.checkedIn?G.accent+"55":G.border}`,
-                      background:p.checkedIn?G.accent+"10":G.card,
-                      cursor:"pointer",textAlign:"left",width:"100%"}}>
-                    <div style={{width:36,height:36,borderRadius:10,background:p.gender==="M"?"#60a5fa22":"#f472b622",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
-                      {p.gender==="M"?"♂":"♀"}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:700,color:p.checkedIn?G.muted:G.text}}>{safe(p.name)}</div>
-                      <div style={{fontSize:11,color:G.muted,marginTop:2,display:"flex",gap:6}}>
-                        <span style={{padding:"1px 6px",borderRadius:4,background:SKILL_COLOR[p.skill]+"25",color:SKILL_COLOR[p.skill],fontWeight:700}}>{p.skill}</span>
-                        <span>{p.gamesPlayed||0} trận · ELO {p.elo||"?"}</span>
-                      </div>
-                    </div>
-                    {p.checkedIn
-                      ? <span style={{fontSize:11,color:G.accent,fontWeight:700,flexShrink:0}}>✅ Đã vào</span>
-                      : <span style={{fontSize:18,flexShrink:0}}>→</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Divider */}
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-              <div style={{flex:1,height:1,background:G.border}}/>
-              <span style={{fontSize:11,color:G.dim,fontWeight:600}}>HOẶC ĐĂNG KÝ MỚI</span>
-              <div style={{flex:1,height:1,background:G.border}}/>
-            </div>
-
-            <button onClick={goNew} style={bPrimary({background:`linear-gradient(135deg,${G.gold},${G.red})`})}>
-              ✏️ Đăng ký người mới
-            </button>
-
-            {/* Stats */}
-            {activeEvent && (
-              <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                {[
-                  {l:"Check-in",v:players.filter(p=>p.checkedIn).length,c:G.accent},
-                  {l:"Đang đấu",v:(dbData?.courts||[]).filter(c=>c.match).length*4,c:G.red},
-                  {l:"Chờ",v:players.filter(p=>p.checkedIn).length-(dbData?.courts||[]).filter(c=>c.match).length*4,c:G.purple},
-                ].map(s=>(
-                  <div key={s.l} style={{padding:"10px 8px",borderRadius:10,background:G.card,border:`1px solid ${G.border}`,textAlign:"center"}}>
-                    <div style={{fontSize:18,fontWeight:900,color:s.c}}>{Math.max(0,s.v)}</div>
-                    <div style={{fontSize:9,color:G.muted,marginTop:2,fontWeight:600}}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP: FORM */}
-        {step==="form" && (
-          <div style={{background:G.panel,borderRadius:18,padding:24,border:`1px solid ${G.border}`}}>
-            {matched && (
-              <div style={{padding:"9px 13px",borderRadius:9,background:G.accent+"12",border:`1px solid ${G.accent}33`,marginBottom:18,fontSize:12,color:G.accent,fontWeight:600}}>
-                🎯 Tìm thấy: {matched.name} — xác nhận thông tin
-              </div>
-            )}
-
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1,marginBottom:7}}>TÊN *</div>
-              <input value={form.name} onChange={e=>sf("name",e.target.value)}
-                style={{...iS,fontSize:16}} autoFocus placeholder="Tên của bạn..."/>
-            </div>
-
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1,marginBottom:7}}>GIỚI TÍNH</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=>(
-                  <button key={g.v} onClick={()=>sf("gender",g.v)}
-                    style={{padding:"13px",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:15,
-                      border:`2px solid ${form.gender===g.v?g.c:G.border}`,
-                      background:form.gender===g.v?g.c+"25":"transparent",
-                      color:form.gender===g.v?g.c:G.muted}}>
-                    {g.l}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1,marginBottom:7}}>TRÌNH ĐỘ</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                {SKILL_LEVELS.map(s=>{
-                  const c=SKILL_COLOR[s], sel=form.skill===s;
-                  return <button key={s} onClick={()=>sf("skill",s)}
-                    style={{padding:"10px 4px",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,
-                      textAlign:"center",flexDirection:"column",
-                      border:`2px solid ${sel?c:G.border}`,
-                      background:sel?c+"28":"transparent",color:sel?c:G.muted}}>
-                    <div style={{fontWeight:900,fontSize:13}}>{s}</div>
-                    <div style={{fontSize:8,marginTop:2,opacity:.7}}>{SKILL_DESC[s].split(" ")[0]}</div>
-                  </button>;
-                })}
-              </div>
-            </div>
-
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1,marginBottom:7}}>KIỂU ĐÔI YÊU THÍCH</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
-                {DTYPE_OPT.map(d=>{
-                  const sel=form.dtype===d.val;
-                  return <button key={d.val} onClick={()=>sf("dtype",d.val)}
-                    style={{padding:"11px 8px",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700,
-                      textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,
-                      background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>
-                    {d.label}
-                  </button>;
-                })}
-              </div>
-            </div>
-
-            {err && (
-              <div style={{padding:"10px 13px",borderRadius:9,background:G.red+"15",
-                border:`1px solid ${G.red}44`,color:G.red,fontSize:13,marginBottom:14,fontWeight:600}}>
-                ⚠️ {err}
-              </div>
-            )}
-
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={submit} disabled={submitting||!form.name.trim()}
-                style={bPrimary({flex:1,opacity:submitting||!form.name.trim()?0.5:1})}>
-                {submitting?"⏳ Đang xử lý...":"✅ Check in!"}
-              </button>
-              <button onClick={reset} style={bSecondary}>←</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP: SUCCESS */}
-        {step==="success" && result && (
-          <div style={{background:G.panel,borderRadius:18,padding:32,
-            border:`2px solid ${G.accent}55`,textAlign:"center"}}>
-            <div style={{fontSize:60,marginBottom:12}}>🎉</div>
-            <div style={{fontSize:20,fontWeight:900,color:G.accent,marginBottom:8}}>
-              Check in thành công!
-            </div>
-            <div style={{fontSize:28,fontWeight:900,color:"#fff",marginBottom:20}}>
-              {safe(result.name)}
-            </div>
-            <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginBottom:24}}>
-              <span style={{fontSize:13,padding:"5px 12px",borderRadius:7,
-                background:result.gender==="M"?"#60a5fa20":"#f472b620",
-                color:result.gender==="M"?"#60a5fa":"#f472b6",fontWeight:700}}>
-                {result.gender==="M"?"♂ Nam":"♀ Nữ"}
-              </span>
-              <span style={{fontSize:13,padding:"5px 12px",borderRadius:7,
-                background:SKILL_COLOR[result.skill]+"25",
-                color:SKILL_COLOR[result.skill],fontWeight:700}}>
-                Trình {result.skill}
-              </span>
-              {result.isNew && (
-                <span style={{fontSize:13,padding:"5px 12px",borderRadius:7,
-                  background:G.gold+"25",color:G.gold,fontWeight:700}}>
-                  🆕 Người mới
-                </span>
-              )}
-            </div>
-            <div style={{padding:"14px 16px",borderRadius:12,background:G.card,
-              border:`1px solid ${G.border}`,marginBottom:22,fontSize:13,color:G.muted,lineHeight:1.6}}>
-              ⏳ Bạn đã vào hàng chờ.<br/>Host sẽ xếp trận cho bạn sớm nhé!
-            </div>
-            <button onClick={reset} style={bPrimary()}>
-              🔄 Check in người tiếp theo
-            </button>
-          </div>
-        )}
-
-        {/* ── STEP: ALREADY */}
-        {step==="already" && result && (
-          <div style={{background:G.panel,borderRadius:18,padding:32,
-            border:`2px solid ${G.gold}55`,textAlign:"center"}}>
-            <div style={{fontSize:52,marginBottom:12}}>👋</div>
-            <div style={{fontSize:18,fontWeight:800,color:G.gold,marginBottom:8}}>Đã check in rồi!</div>
-            <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:20}}>
-              {safe(result.name)}
-            </div>
-            <div style={{padding:"12px 16px",borderRadius:11,background:G.card,
-              border:`1px solid ${G.border}`,marginBottom:22,fontSize:13,color:G.muted}}>
-              Bạn đã có trong hàng chờ. Hãy chờ Host xếp trận nhé! 🏓
-            </div>
-            <button onClick={reset}
-              style={bPrimary({background:`linear-gradient(135deg,${G.gold},${G.red})`})}>
-              🔄 Check in người khác
-            </button>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{textAlign:"center",marginTop:28,fontSize:10,color:G.dim,letterSpacing:1}}>
-          🏓 PICKLEBALL SOCIAL · KOOTORO RATING SYSTEM
-        </div>
-      </div>
-    </div>
-  );
+    if(!ref.current||!window.QRCode) return;
+    ref.current.innerHTML="";
+    new window.QRCode(ref.current,{
+      text:url,width:size,height:size,
+      colorDark:"#00c9a7",colorLight:"#060c18",
+      correctLevel:window.QRCode.CorrectLevel.M
+    });
+  },[url,size]);
+  return <div ref={ref} style={{display:"inline-block",padding:10,borderRadius:12,background:"#060c18",border:`2px solid ${G.accent}55`}}/>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+function App(){
+  const [step,setStep]=useState("name");
+  const [dbData,setDb]=useState(window.__data);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const [search,setSearch]=useState("");
+  const [matched,setMatched]=useState(null);
+  const [form,setForm]=useState({name:"",gender:"M",skill:"3.0",dtype:"any"});
+  const [result,setResult]=useState(null);
+  const [showQR,setShowQR]=useState(false);
+  const sRef=useRef();
+  const checkinURL=window.location.href.split('?')[0]; // URL trang này
+  const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+
+  useEffect(()=>{
+    const unsub=window.FB?.subscribe(d=>setDb(d));
+    return ()=>unsub&&unsub();
+  },[]);
+
+  useEffect(()=>{
+    if(step==="name") setTimeout(()=>sRef.current?.focus(),150);
+  },[step]);
+
+  const players=dbData?.players||[];
+  const activeEvent=dbData?.events?.find(e=>e.id===dbData?.activeEventId);
+  const liveCount=(dbData?.courts||[]).filter(c=>c.match).length;
+  const ciCount=players.filter(p=>p?.checkedIn).length;
+  const waitCount=Math.max(0,ciCount-liveCount*4);
+
+  const sq=safe(search).toLowerCase().trim();
+  const sugg=sq.length>=1?players.filter(p=>safe(p.name).toLowerCase().includes(sq)).slice(0,6):[];
+
+  const pick=p=>{
+    if(p.checkedIn){setResult(p);setStep("already");return;}
+    setForm({name:p.name,gender:p.gender||"M",skill:p.skill||"3.0",dtype:p.dtype||"any"});
+    setMatched(p);setStep("form");
+  };
+  const goNew=()=>{setForm({name:search.trim(),gender:"M",skill:"3.0",dtype:"any"});setMatched(null);setStep("form");};
+
+  const submit=async()=>{
+    if(!form.name.trim()){setErr("Vui lòng nhập tên!");return;}
+    setBusy(true);setErr("");
+    try{
+      const fresh=await window.FB.load();
+      const all=fresh?.players||[];
+      const ex=all.find(p=>safe(p.name).toLowerCase()===form.name.trim().toLowerCase());
+      if(ex?.checkedIn){setResult(ex);setStep("already");setBusy(false);return;}
+      const now=new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
+      const newP=ex?{...ex,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true}
+        :{id:uid(),name:form.name.trim(),gender:form.gender,skill:form.skill,dtype:form.dtype,
+          elo:sElo(form.skill),baseElo:sElo(form.skill),checkedIn:true,gamesPlayed:0,wins:0,
+          lastPartners:[],coupleId:null,coupleType:null,phone:"",note:"",createdAt:now,kootoro:0};
+      const upd=ex?all.map(p=>p.id===ex.id?newP:p):[...all,newP];
+      const ok=await window.FB.save({...fresh,players:upd});
+      if(ok){setResult({...newP,isNew:!ex});setDb(d=>({...d,players:upd}));setStep("success");}
+      else setErr("Lỗi lưu dữ liệu. Thử lại!");
+    }catch(e){console.error(e);setErr("Lỗi: "+e.message);}
+    setBusy(false);
+  };
+
+  const reset=()=>{setStep("name");setSearch("");setMatched(null);setResult(null);setErr("");setForm({name:"",gender:"M",skill:"3.0",dtype:"any"});};
+
+  return(
+  <div style={{minHeight:"100vh",background:G.bg,color:G.text,padding:"20px 16px 40px"}}>
+  <div style={{maxWidth:480,margin:"0 auto"}}>
+
+    {/* QR MODAL */}
+    {showQR&&<div onClick={()=>setShowQR(false)} style={{position:"fixed",inset:0,background:"#000c",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:G.panel,borderRadius:24,padding:28,maxWidth:340,width:"100%",textAlign:"center",border:`2px solid ${G.accent}55`}}>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:4}}>📱 QR Check In</div>
+        <div style={{fontSize:11,color:G.muted,marginBottom:18}}>Player quét QR này để check in</div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
+          <QRBox url={checkinURL} size={200}/>
+        </div>
+        <div style={{fontSize:10,color:G.muted,padding:"8px 12px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`,marginBottom:16,wordBreak:"break-all"}}>
+          {checkinURL}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{window.print();}} style={bP({flex:1,fontSize:13,padding:"11px"})}>🖨️ In QR</button>
+          <button onClick={()=>setShowQR(false)} style={{...bO,padding:"11px 16px"}}>Đóng</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Print styles — chỉ hiện QR khi in */}
+    <style>{`@media print{body>*{display:none!important;}#print-qr{display:block!important;}}`}</style>
+    <div id="print-qr" style={{display:"none",textAlign:"center",padding:40,fontFamily:"sans-serif"}}>
+      <div style={{fontSize:28,fontWeight:900,marginBottom:8}}>🏓 PICKLEBALL CHECK IN</div>
+      {activeEvent&&<div style={{fontSize:16,color:"#555",marginBottom:20}}>{activeEvent.name}</div>}
+      <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
+        <div id="print-qr-canvas"/>
+      </div>
+      <div style={{fontSize:14,color:"#333",marginBottom:8}}>Quét QR để check in</div>
+      <div style={{fontSize:12,color:"#888"}}>{checkinURL}</div>
+    </div>
+
+    {/* HEADER */}
+    <div style={{textAlign:"center",marginBottom:24}}>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+        <button onClick={()=>setShowQR(true)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${G.accent}55`,background:G.accent+"12",color:G.accent,fontWeight:700,fontSize:12}}>
+          📱 Hiện QR
+        </button>
+      </div>
+      <div style={{width:70,height:70,borderRadius:22,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:`0 8px 32px ${G.accent}50`}}>🏓</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1}}>CHECK IN</div>
+      {activeEvent
+        ?<div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:7,padding:"5px 16px",borderRadius:20,background:G.accent+"18",border:`1px solid ${G.accent}44`}}>
+          <span style={{width:7,height:7,borderRadius:"50%",background:G.accent,display:"inline-block",boxShadow:`0 0 6px ${G.accent}`}}/>
+          <span style={{fontSize:13,color:G.accent,fontWeight:700}}>{activeEvent.name}</span>
+         </div>
+        :<div style={{fontSize:12,color:G.muted,marginTop:8}}>Chưa có event nào đang chạy</div>}
+      {activeEvent&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>
+        {[{icon:"✅",label:"Check-in",val:ciCount,c:G.accent},{icon:"🔴",label:"Đang đấu",val:liveCount,c:G.red},{icon:"⏳",label:"Chờ",val:waitCount,c:G.purple}].map(s=>(
+          <div key={s.label} style={{padding:"10px 6px",borderRadius:11,background:G.panel,border:`1px solid ${G.border}`,textAlign:"center"}}>
+            <div style={{fontSize:11,marginBottom:3}}>{s.icon}</div>
+            <div style={{fontSize:20,fontWeight:900,color:s.c}}>{s.val}</div>
+            <div style={{fontSize:9,color:G.muted,marginTop:1,fontWeight:600}}>{s.label}</div>
+          </div>
+        ))}
+      </div>}
+    </div>
+
+    {/* STEP: TÊN */}
+    {step==="name"&&<div style={{background:G.panel,borderRadius:20,padding:20,border:`1px solid ${G.border}`}}>
+      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>👤 Tìm tên của bạn</div>
+      <div style={{position:"relative",marginBottom:sugg.length?10:14}}>
+        <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:18,pointerEvents:"none"}}>🔍</span>
+        <input ref={sRef} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Gõ tên để tìm..." style={iS({paddingLeft:44,fontSize:17})}/>
+      </div>
+      {sugg.length>0&&<div style={{marginBottom:14,display:"flex",flexDirection:"column",gap:5}}>
+        {sugg.map(p=>{const sc=SC[p.skill]||G.muted;return(
+          <button key={p.id} onClick={()=>pick(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:13,border:`1px solid ${p.checkedIn?G.accent+"55":G.border}`,background:p.checkedIn?G.accent+"0a":G.card,width:"100%",textAlign:"left"}}>
+            <div style={{width:42,height:42,borderRadius:12,flexShrink:0,background:p.gender==="M"?"#60a5fa18":"#f472b618",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,border:`1px solid ${p.gender==="M"?"#60a5fa33":"#f472b633"}`}}>{p.gender==="M"?"♂":"♀"}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:p.checkedIn?G.muted:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+              <div style={{fontSize:11,color:G.muted,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{padding:"1px 7px",borderRadius:5,background:sc+"25",color:sc,fontWeight:700}}>{p.skill}</span>
+                <span>{p.gamesPlayed||0} trận · ELO {p.elo||"?"}</span>
+              </div>
+            </div>
+            {p.checkedIn?<span style={{fontSize:11,color:G.accent,fontWeight:700,flexShrink:0}}>✅ Đã vào</span>:<span style={{fontSize:20,color:G.muted,flexShrink:0}}>›</span>}
+          </button>
+        );})}
+      </div>}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <div style={{flex:1,height:1,background:G.border}}/><span style={{fontSize:10,color:G.dim,fontWeight:700,letterSpacing:1}}>HOẶC</span><div style={{flex:1,height:1,background:G.border}}/>
+      </div>
+      <button onClick={goNew} style={bP({background:`linear-gradient(135deg,${G.gold},${G.red})`})}>✏️ Đăng ký người mới</button>
+    </div>}
+
+    {/* STEP: FORM */}
+    {step==="form"&&<div style={{background:G.panel,borderRadius:20,padding:20,border:`1px solid ${G.border}`}}>
+      {matched&&<div style={{padding:"10px 14px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}33`,marginBottom:18,fontSize:13,color:G.accent,fontWeight:600}}>🎯 Tìm thấy: <b>{matched.name}</b></div>}
+      <div style={{marginBottom:16}}><Lbl t="TÊN *"/><input value={form.name} onChange={e=>sf("name",e.target.value)} placeholder="Nhập tên..." style={iS({fontSize:17})} autoFocus/></div>
+      <div style={{marginBottom:16}}><Lbl t="GIỚI TÍNH"/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=>(
+            <button key={g.v} onClick={()=>sf("gender",g.v)} style={{padding:"14px",borderRadius:12,fontWeight:700,fontSize:16,border:`2px solid ${form.gender===g.v?g.c:G.border}`,background:form.gender===g.v?g.c+"22":"transparent",color:form.gender===g.v?g.c:G.muted}}>{g.l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:16}}><Lbl t="TRÌNH ĐỘ"/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+          {SKILLS.map(s=>{const c=SC[s],sel=form.skill===s;return(
+            <button key={s} onClick={()=>sf("skill",s)} style={{padding:"10px 2px",borderRadius:11,fontWeight:700,fontSize:13,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}>
+              <div style={{fontWeight:900,fontSize:14}}>{s}</div>
+              <div style={{fontSize:8,marginTop:2,opacity:.7,fontWeight:400}}>{SD[s]}</div>
+            </button>);
+          })}
+        </div>
+      </div>
+      <div style={{marginBottom:20}}><Lbl t="KIỂU ĐÔI YÊU THÍCH"/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+          {DT.map(d=>{const sel=form.dtype===d.val;return(
+            <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"12px 8px",borderRadius:12,fontSize:13,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>
+          );})}
+        </div>
+      </div>
+      {err&&<div style={{padding:"11px 14px",borderRadius:10,background:G.red+"15",border:`1px solid ${G.red}44`,color:G.red,fontSize:13,fontWeight:600,marginBottom:14}}>⚠️ {err}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={submit} disabled={busy||!form.name.trim()} style={bP({flex:1,opacity:busy||!form.name.trim()?0.5:1})}>{busy?"⏳ Đang xử lý...":"✅ Check in!"}</button>
+        <button onClick={reset} style={bO}>←</button>
+      </div>
+    </div>}
+
+    {/* STEP: THÀNH CÔNG */}
+    {step==="success"&&result&&<div style={{background:G.panel,borderRadius:20,padding:32,border:`2px solid ${G.accent}55`,textAlign:"center"}}>
+      <div style={{fontSize:64,marginBottom:8}}>🎉</div>
+      <div style={{fontSize:19,fontWeight:900,color:G.accent,marginBottom:10}}>Check in thành công!</div>
+      <div style={{fontSize:28,fontWeight:900,color:"#fff",marginBottom:20,padding:"10px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`}}>{safe(result.name)}</div>
+      <div style={{display:"flex",gap:7,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+        <span style={{fontSize:13,padding:"5px 13px",borderRadius:8,fontWeight:700,background:result.gender==="M"?"#60a5fa20":"#f472b620",color:result.gender==="M"?"#60a5fa":"#f472b6"}}>{result.gender==="M"?"♂ Nam":"♀ Nữ"}</span>
+        <span style={{fontSize:13,padding:"5px 13px",borderRadius:8,fontWeight:700,background:SC[result.skill]+"25",color:SC[result.skill]}}>Trình {result.skill}</span>
+        {result.isNew&&<span style={{fontSize:13,padding:"5px 13px",borderRadius:8,fontWeight:700,background:G.gold+"25",color:G.gold}}>🆕 Người mới</span>}
+      </div>
+      <div style={{padding:"14px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:22,fontSize:14,color:G.muted,lineHeight:1.7}}>
+        ⏳ Bạn đã được thêm vào hàng chờ.<br/><span style={{color:G.text,fontWeight:600}}>Host sẽ xếp trận cho bạn sớm nhé!</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
+        {[{icon:"✅",label:"Check-in",val:players.filter(p=>p?.checkedIn).length,c:G.accent},{icon:"🔴",label:"Đang đấu",val:liveCount,c:G.red},{icon:"⏳",label:"Chờ",val:waitCount,c:G.purple}].map(s=>(
+          <div key={s.label} style={{padding:"8px 4px",borderRadius:10,background:G.bg,border:`1px solid ${G.border}`,textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.val}</div>
+            <div style={{fontSize:9,color:G.muted,fontWeight:600}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={reset} style={bP()}>🔄 Check in người tiếp theo</button>
+    </div>}
+
+    {/* STEP: ĐÃ CHECK IN */}
+    {step==="already"&&result&&<div style={{background:G.panel,borderRadius:20,padding:32,border:`2px solid ${G.gold}55`,textAlign:"center"}}>
+      <div style={{fontSize:56,marginBottom:10}}>👋</div>
+      <div style={{fontSize:18,fontWeight:800,color:G.gold,marginBottom:8}}>Đã check in rồi!</div>
+      <div style={{fontSize:28,fontWeight:900,color:"#fff",marginBottom:8}}>{safe(result.name)}</div>
+      <div style={{fontSize:13,color:G.muted,marginBottom:20}}>{result.skill} · {result.gender==="M"?"Nam":"Nữ"} · ELO {result.elo}</div>
+      <div style={{padding:"13px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:22,fontSize:14,color:G.muted,lineHeight:1.7}}>
+        Bạn đã có trong hàng chờ rồi. 🏓<br/><span style={{color:G.text,fontWeight:600}}>Hãy chờ Host xếp trận nhé!</span>
+      </div>
+      <button onClick={reset} style={bP({background:`linear-gradient(135deg,${G.gold},${G.red})`})}>🔄 Check in người khác</button>
+    </div>}
+
+    <div style={{textAlign:"center",marginTop:28,fontSize:10,color:G.dim,letterSpacing:1.5,fontWeight:600}}>🏓 PICKLEBALL SOCIAL · KOOTORO RATING</div>
+  </div></div>);
+}
+
+function mount(){
+  document.getElementById('loading').style.display='none';
+  document.getElementById('root').style.display='block';
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+}
+
+if(window._fbOK){mount();}
+else{
+  document.addEventListener('fb-ok',mount,{once:true});
+  setTimeout(()=>{
+    if(!window._fbOK){
+      console.warn('Firebase timeout');
+      window.__data=null;
+      window.FB=window.FB||{load:()=>Promise.resolve(null),save:()=>Promise.resolve(false),subscribe:()=>()=>{}};
+      mount();
+    }
+  },8000);
+}
 </script>
 </body>
 </html>
