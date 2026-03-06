@@ -676,54 +676,32 @@ function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,
   const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
   const diff=m?Math.abs(teamElo(m.team1)-teamElo(m.team2)):0;
   const isKing=gameMode==="king"&&courtIdx===0;
-  const courtLabel=isKing?"👑 Vua":gameMode==="ladder"?`🪜 #${(courtIdx||0)+1}`:court.name;
+  const courtLabel=isKing?"👑 Sân Vua":gameMode==="ladder"?`🪜 Sân #${(courtIdx||0)+1}`:court.name;
   const borderCol=isKing?G.gold+(m?"99":"44"):m?dc.color+"77":G.border;
-  return <div style={{background:G.panel,border:`2px solid ${borderCol}`,borderRadius:13,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:140}}>
-    {/* Header */}
-    <div style={{padding:"6px 10px",background:isKing?G.gold+"14":m?dc.color+"14":G.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${G.border}`}}>
-      <div style={{fontWeight:800,fontSize:12,color:isKing?G.gold:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{courtLabel}</div>
-      <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-        {m&&<div style={{fontFamily:"monospace",fontSize:11,fontWeight:900,color:isKing?G.gold:dc.color}}>{mm}:{ss}</div>}
-        <div style={{padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:700,whiteSpace:"nowrap",
-          background:m?G.red+"20":G.accent+"20",
-          color:m?G.red:G.accent,
-          border:`1px solid ${m?G.red+"55":G.accent+"55"}`}}>
-          {m?"LIVE":"TRỐNG"}
-        </div>
+  return <div style={{background:G.panel,border:`2px solid ${borderCol}`,borderRadius:14,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+    <div style={{padding:"8px 12px",background:isKing?G.gold+"14":m?dc.color+"14":G.card,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${G.border}`}}>
+      <div><div style={{fontWeight:800,fontSize:13,color:isKing?G.gold:G.text}}>{courtLabel}</div>{m&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:dc.color+"20",color:dc.color,fontWeight:600}}>{dc.label}</span>}</div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        {m&&<div style={{fontFamily:"monospace",fontSize:15,fontWeight:900,color:isKing?G.gold:dc.color}}>{mm}:{ss}</div>}
+        <Chip label={m?"🔴 LIVE":"🟢 TRỐNG"} color={m?G.red:G.accent}/>
       </div>
     </div>
-    {/* Body */}
-    <div style={{padding:"8px 10px",flex:1}}>
+    <div style={{padding:10,flex:1}}>
       {m?(<>
-        {/* Team A */}
-        <div style={{marginBottom:4}}>
-          <div style={{fontSize:8,color:G.accent,fontWeight:700,letterSpacing:1,marginBottom:2}}>TEAM A</div>
-          {(m.team1||[]).filter(Boolean).map(p=>(
-            <div key={p.id} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
-          ))}
-        </div>
-        <div style={{textAlign:"center",fontSize:8,color:G.dim,marginBottom:4}}>VS · Δ{diff}{diff<40?"✓":"⚠"}</div>
-        {/* Team B */}
-        <div style={{marginBottom:6}}>
-          <div style={{fontSize:8,color:G.gold,fontWeight:700,letterSpacing:1,marginBottom:2}}>TEAM B</div>
-          {(m.team2||[]).filter(Boolean).map(p=>(
-            <div key={p.id} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
-          ))}
-        </div>
-        {!readOnly&&<div style={{display:"flex",gap:4}}>
+        <TBlock team={m.team1} label="TEAM A" color={G.accent}/>
+        <div style={{textAlign:"center",padding:"4px 0",fontSize:9,color:G.dim}}>Δ{diff}{diff<40?" ✓":" ⚠"}</div>
+        <TBlock team={m.team2} label="TEAM B" color={G.gold}/>
+        {!readOnly&&<div style={{display:"flex",gap:5,marginTop:8}}>
           <button onClick={()=>onScore(court.id)} style={{...bP,flex:1,padding:"7px 0",fontSize:11}}>📊 Tỉ số</button>
-          {onSub&&<button onClick={()=>onSub(court)} style={{padding:"7px 8px",borderRadius:8,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,cursor:"pointer",fontSize:11}}>🔄</button>}
+          {onSub&&<button onClick={()=>onSub(court)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontWeight:700,cursor:"pointer",fontSize:10}} title="Thay người khi bận">🔄</button>}
         </div>}
       </>):(
-        <div style={{textAlign:"center",padding:"12px 0"}}>
-          <div style={{fontSize:26,marginBottom:4}}>{isKing?"👑":"🏓"}</div>
-          <div style={{fontSize:10,color:G.muted,marginBottom:8}}>{isKing?"Chờ Vua":"Sân trống"}</div>
-          {!readOnly&&next?.length
-            ? <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap"}}>
-                {next.slice(0,2).map((q,i)=>{const qc=DTYPE_OPT.find(d=>d.val===q.dtype)?.color||G.accent;return <button key={i} onClick={()=>onAssign(court.id,q)} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${qc}`,background:qc+"14",color:qc,fontWeight:700,cursor:"pointer",fontSize:10}}>▶ Gán</button>;})}
-              </div>
-            : <div style={{fontSize:9,color:G.dim}}>Chưa có trận</div>
-          }
+        <div style={{textAlign:"center",padding:"9px 0"}}>
+          <div style={{fontSize:24,marginBottom:4}}>{isKing?"👑":"🏓"}</div>
+          <div style={{fontSize:10,color:G.muted,marginBottom:8}}>{isKing?"Đang chờ Vua":"Sân trống"}</div>
+          {!readOnly&&next?.length?<div style={{display:"flex",gap:4,justifyContent:"center",flexWrap:"wrap"}}>
+            {next.map((q,i)=>{const qc=DTYPE_OPT.find(d=>d.val===q.dtype)?.color||G.accent;return <button key={i} onClick={()=>onAssign(court.id,q)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${qc}`,background:qc+"14",color:qc,fontWeight:700,cursor:"pointer",fontSize:9}}>▶ {DTYPE_OPT.find(d=>d.val===q.dtype)?.label}</button>;})}
+          </div>:<div style={{fontSize:9,color:G.dim}}>Chưa có trận</div>}
         </div>
       )}
     </div>
@@ -1343,75 +1321,50 @@ function KioskTab({players, onRegister, queue, courts, history}){
 // MAIN TABS
 // ══════════════════════════════════════
 const TABS=[
-  {id:"dashboard", l:"📊 Tổng quan",  sm:"📊"},
-  {id:"courts",    l:"🏟️ Sân đấu",   sm:"🏟️"},
-  {id:"players",   l:"👥 Người chơi", sm:"👥"},
-  {id:"queue",     l:"⚔️ Hàng chờ",  sm:"⚔️"},
-  {id:"leaderboard",l:"🏆 Xếp hạng", sm:"🏆"},
-  {id:"history",   l:"📋 Lịch sử",   sm:"📋"},
-  {id:"analytics", l:"📈 Thống kê",  sm:"📈"},
-  {id:"kiosk",     l:"📲 Kiosk",     sm:"📲"},
+  {id:"dashboard",l:"📊 Tổng quan"},
+  {id:"courts",l:"🏟️ Sân đấu"},
+  {id:"players",l:"👥 Người chơi"},
+  {id:"queue",l:"⚔️ Hàng chờ"},
+  {id:"leaderboard",l:"🏆 Xếp hạng"},
+  {id:"history",l:"📋 Lịch sử"},
+  {id:"analytics",l:"📈 Thống kê"},
+  {id:"kiosk",l:"📲 Kiosk"},
 ];
 
 function DashTab({courts,players,queue,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent}){
   const ci=players.filter(p=>p?.checkedIn).length;
-  const numCourts=courts.length;
-  const liveCount=courts.filter(c=>c.match).length;
-  const stats=[
-    {i:"👥",l:"Tổng",    v:players.length,                                          c:G.blue},
-    {i:"✅",l:"Check-in", v:ci,                                                       c:G.accent},
-    {i:"⏳",l:"Chờ",     v:available.length,                                         c:G.purple},
-    {i:"🔴",l:"Live",    v:liveCount,                                                c:G.red},
-    {i:"📋",l:"Queue",   v:queue.length,                                             c:"#f59e0b"},
-    {i:"🏆",l:"Trận xong",v:history.filter(h=>h.eventId===activeEvent?.id).length,  c:"#34d399"},
-  ];
   return <div>
-    {/* Event banner */}
-    {activeEvent&&<div style={{padding:"8px 12px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-      <div style={{width:8,height:8,borderRadius:"50%",background:G.red,boxShadow:`0 0 8px ${G.red}`,flexShrink:0}}/>
-      <span style={{fontSize:12,fontWeight:800,color:G.accent}}>🗓️ {activeEvent.name}</span>
-      {activeEvent.location&&<span style={{fontSize:10,color:G.muted}}>📍 {activeEvent.location}</span>}
-      <span style={{fontSize:10,color:G.muted,marginLeft:"auto"}}>{activeEvent.date}</span>
+    {activeEvent&&<div style={{padding:"8px 14px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:G.red,boxShadow:`0 0 8px ${G.red}`}}/>
+      <div><span style={{fontSize:12,fontWeight:800,color:G.accent}}>🗓️ {activeEvent.name}</span>{activeEvent.location&&<span style={{fontSize:10,color:G.muted,marginLeft:8}}>📍 {activeEvent.location}</span>}</div>
+      <div style={{marginLeft:"auto",fontSize:10,color:G.muted}}>{activeEvent.date}</div>
     </div>}
-
-    {/* Stats grid — 3 cột trên mobile, 6 trên desktop */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7,marginBottom:10}}>
-      {stats.map(s=>(
-        <div key={s.l} style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:11,padding:"10px 6px",textAlign:"center"}}>
-          <div style={{fontSize:18,marginBottom:2}}>{s.i}</div>
-          <div style={{fontSize:26,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div>
-          <div style={{fontSize:9,color:G.muted,marginTop:3,fontWeight:600}}>{s.l}</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:11}}>
+      {[{i:"👥",l:"Tổng",v:players.length,c:G.blue},{i:"✅",l:"Check-in",v:ci,c:G.accent},{i:"⏳",l:"Chờ",v:available.length,c:G.purple},{i:"🔴",l:"Live",v:courts.filter(c=>c.match).length,c:G.gold},{i:"📋",l:"Queue",v:queue.length,c:G.purple},{i:"🏆",l:"Kết thúc",v:history.filter(h=>h.eventId===activeEvent?.id).length,c:"#34d399"}].map(s=>(
+        <div key={s.l} style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:10,padding:"10px 7px",textAlign:"center"}}>
+          <div style={{fontSize:16,marginBottom:2}}>{s.i}</div><div style={{fontSize:24,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div><div style={{fontSize:8,color:G.muted,marginTop:2}}>{s.l}</div>
         </div>
       ))}
     </div>
-
-    {/* Queue + Actions — stack dọc trên mobile */}
-    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:12,padding:12,marginBottom:10}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ QUEUE {queue.length>0&&`(${queue.length})`}</div>
-      {!queue.length
-        ? <div style={{color:G.dim,fontSize:11,marginBottom:10}}>Queue trống</div>
-        : <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
-            {queue.slice(0,5).map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign}/>)}
-          </div>
-      }
-      {/* Action buttons — 2x2 grid trên mobile */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
-        <button onClick={onQR}    style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,   fontSize:12,padding:"11px 8px"}}>📷 QR Check-in</button>
-        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`,fontSize:12,padding:"11px 8px"}}>✏️ Custom</button>
-        <button onClick={genQ}    style={{...bS,fontSize:12,padding:"11px 8px"}}>🎲 Tạo trận</button>
-        <button onClick={autoAss} style={{...bP,fontSize:12,padding:"11px 8px"}}>▶ Auto gán</button>
+    <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8,marginBottom:11,background:G.panel,border:`1px solid ${G.border}`,borderRadius:11,padding:11}}>
+      <div>
+        <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ QUEUE</div>
+        {!queue.length?<div style={{color:G.dim,fontSize:11}}>Queue trống</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>{queue.slice(0,5).map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign}/>)}</div>}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:130}}>
+        <button onClick={onQR} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11,padding:"9px 12px"}}>📷 QR Check-in</button>
+        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`,fontSize:11}}>✏️ Custom</button>
+        <button onClick={genQ} style={{...bS,fontSize:11}}>🎲 Tạo trận</button>
+        <button onClick={autoAss} style={{...bP,fontSize:11,padding:"9px 12px"}}>▶ Auto gán</button>
       </div>
     </div>
-
-    {/* Courts — 2 cột trên mobile */}
-    <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:7}}>🏟️ {numCourts} SÂN</div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:12}}>
-      {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}
+    <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:7}}>🏟️ 5 SÂN</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+      {courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign}/>)}
     </div>
-
-    {/* Recent results */}
     {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,margin:"4px 0 7px"}}>📋 KẾT QUẢ GẦN ĐÂY</div>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,margin:"14px 0 7px"}}>📋 KẾT QUẢ GẦN ĐÂY</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
         {history.filter(h=>h.eventId===activeEvent?.id).slice(0,4).map(h=><HCard key={h.id} h={h}/>)}
       </div>
@@ -1769,20 +1722,8 @@ function App(){
     showT(`💾 Đã lưu: ${safe(p.name)}`);
   };
 
-  const CSS=`
-    @keyframes tIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-    input,select{outline:none;}
-    input::placeholder{color:${G.muted};}
-    ::-webkit-scrollbar{width:4px;height:4px;}
-    ::-webkit-scrollbar-thumb{background:${G.border};border-radius:3px;}
-    button:active{transform:scale(.97);}
-    nav::-webkit-scrollbar{display:none;}
-    nav{-ms-overflow-style:none;scrollbar-width:none;}
-    .hscroll::-webkit-scrollbar{display:none;}
-    .hscroll{-ms-overflow-style:none;scrollbar-width:none;}
-  `;
-
+  const CSS=`@keyframes tIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}*{box-sizing:border-box;}input,select{outline:none;}input::placeholder{color:${G.muted};}::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-thumb{background:${G.border};border-radius:3px;}button:active{transform:scale(.97);}`;
+  const isSA=me?.role===ROLES.SA;
   const scoreMatch=scoreTarget?courts.find(c=>c.id===scoreTarget)?.match:null;
 
   if(!me) return <><style>{CSS}</style><Login accounts={accounts} onLogin={setMe} loading={loading}/></>;
@@ -1805,51 +1746,36 @@ function App(){
     {editingPlayer&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
     {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
 
-    {/* HEADER — compact mobile */}
-    <header style={{background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
-      {/* Row 1: Logo + event + key stats + settings */}
-      <div style={{height:50,display:"flex",alignItems:"center",gap:8,padding:"0 10px"}}>
-        {/* Logo */}
-        <div style={{width:32,height:32,borderRadius:9,flexShrink:0,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🏓</div>
-        {/* Title + role */}
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:900,fontSize:12,color:"#fff",lineHeight:1.1,display:"flex",alignItems:"center",gap:5}}>
-            PICKLEBALL <SaveDot saving={saving}/>
+    {/* HEADER */}
+    <header style={{height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🏓</div>
+        <div>
+          <div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1,display:"flex",alignItems:"center",gap:6}}>
+            PICKLEBALL SOCIAL <SaveDot saving={saving}/>
           </div>
-          <div style={{fontSize:9,color:G.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-            {safe(me.name)} · {activeEvent?activeEvent.name:"Chưa có event"}
-          </div>
-        </div>
-        {/* Key stats — compact chips */}
-        <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-          <div style={{padding:"3px 7px",borderRadius:6,background:G.accent+"18",border:`1px solid ${G.accent}44`,fontSize:11,fontWeight:700,color:G.accent}}>
-            ✅{players.filter(p=>p?.checkedIn).length}
-          </div>
-          <div style={{padding:"3px 7px",borderRadius:6,background:G.red+"18",border:`1px solid ${G.red}44`,fontSize:11,fontWeight:700,color:G.red}}>
-            🔴{courts.filter(c=>c.match).length}
-          </div>
-          {/* Event toggle */}
-          {activeEvent
-            ? <div style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:6,background:G.accent+"12",border:`1px solid ${G.accent}44`,maxWidth:90,overflow:"hidden"}}>
-                <span style={{fontSize:9,color:G.accent,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeEvent.name}</span>
-                <button onClick={endEvent} style={{padding:"1px 3px",borderRadius:3,border:"none",background:"transparent",color:G.red,cursor:"pointer",fontSize:10,fontWeight:700,flexShrink:0}}>✕</button>
-              </div>
-            : <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:9,padding:"4px 8px",flexShrink:0}}>🗓️</button>
-          }
-          {isSA&&<button onClick={()=>setModal("admin")} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`,padding:"4px 7px",fontSize:12}}>⚙️</button>}
+          <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{safe(me.name).toUpperCase()} · {activeEvent?activeEvent.name:"Chưa có event"}</div>
         </div>
       </div>
-      {/* Row 2: Quick action strip — scroll horizontal */}
-      <div className="hscroll" style={{display:"flex",gap:5,padding:"4px 10px 6px",overflowX:"auto"}}>
-        <button onClick={()=>setModal("qr")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:10,padding:"5px 11px",flexShrink:0,borderRadius:7}}>📷 QR</button>
-        <button onClick={()=>setTab("kiosk")} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:10,padding:"5px 11px",flexShrink:0,borderRadius:7}}>📲 Kiosk</button>
-        <button onClick={()=>setModal("couple")} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>💑 Cặp</button>
-        <button onClick={()=>setTvMode(true)} style={{...bS,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>📺 TV</button>
-        <div style={{padding:"4px 8px",borderRadius:7,background:G.gold+"12",border:`1px solid ${G.gold}33`,fontSize:9,color:G.gold,fontWeight:700,flexShrink:0,display:"flex",alignItems:"center",cursor:"pointer"}} onClick={()=>setModal("admin")}>
-          👁 {accounts?.viewerCode||"PICKLE"}
-        </div>
+      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+        <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
+        <Chip label={`🔴 ${courts.filter(c=>c.match).length} live`} color={G.gold}/>
         <RBadge role={me.role}/>
-        <button onClick={()=>setMe(null)} style={{...bS,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7,color:G.red,border:`1px solid ${G.red}33`}}>← Xuất</button>
+        <span onClick={()=>setModal("admin")} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:G.gold+"20",color:G.gold,border:`1px solid ${G.gold}40`,fontWeight:700,cursor:"pointer"}}>👁 {accounts?.viewerCode||"???"}</span>
+        {/* EVENT SWITCHER */}
+        {activeEvent
+          ? <div style={{display:"flex",gap:4,alignItems:"center",padding:"3px 9px",borderRadius:7,background:G.accent+"15",border:`1px solid ${G.accent}44`}}>
+              <span style={{fontSize:10,color:G.accent,fontWeight:700}}>🗓️ {activeEvent.name}</span>
+              <button onClick={endEvent} title="Kết thúc event" style={{padding:"1px 6px",borderRadius:4,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,cursor:"pointer",fontSize:9,fontWeight:700}}>✕</button>
+            </div>
+          : <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:"6px 12px"}}>🗓️ Tạo Event</button>
+        }
+        <button onClick={()=>setTvMode(true)} style={bS}>📺</button>
+        <button onClick={()=>setModal("couple")} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`}}>💑</button>
+        <button onClick={()=>setModal("qr")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11}}>📷 QR</button>
+        <button onClick={()=>setTab("kiosk")} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:11,padding:"7px 12px"}}>📲 Kiosk</button>
+        {isSA&&<button onClick={()=>setModal("admin")} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>⚙️</button>}
+        <button onClick={()=>setMe(null)} style={bS}>← Đăng xuất</button>
       </div>
     </header>
 
@@ -1861,19 +1787,19 @@ function App(){
     </div>}
 
     {/* NAV */}
-    <nav style={{display:"flex",gap:2,padding:"4px 10px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
-      {TABS.map(t=>{const isK=t.id==="kiosk",isH=t.id==="history";const ac=isK?G.purple:isH?G.gold:G.accent;const act=tab===t.id;return <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:act?ac+"22":"transparent",color:act?ac:G.muted,borderBottom:act?`2px solid ${ac}`:"2px solid transparent",flexShrink:0}}>{t.l}</button>;})}
+    <nav style={{display:"flex",gap:2,padding:"4px 12px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
+      {TABS.map(t=>{const isK=t.id==="kiosk",isH=t.id==="history";const ac=isK?G.purple:isH?G.gold:G.accent;const act=tab===t.id;return <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:act?ac+"22":"transparent",color:act?ac:G.muted,borderBottom:act?`2px solid ${ac}`:"2px solid transparent"}}>{t.l}</button>;})}
     </nav>
 
     {/* MAIN CONTENT */}
-    <main className="main-pad" style={{padding:"10px 12px",maxWidth:1800,margin:"0 auto"}}>
+    <main style={{padding:"12px 14px",maxWidth:1800,margin:"0 auto"}}>
       {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent}/>}
       {tab==="courts"     &&<div>
         {activeEvent?.gameMode&&activeEvent.gameMode!=="normal"&&(()=>{const gm=GAME_MODES.find(m=>m.val===activeEvent.gameMode);return <div style={{padding:"8px 14px",borderRadius:9,background:activeEvent.gameMode==="king"?G.gold+"14":G.purple+"14",border:`1px solid ${activeEvent.gameMode==="king"?G.gold:G.purple}44`,marginBottom:10,display:"flex",alignItems:"center",gap:9}}>
           <span style={{fontSize:18}}>{gm?.label.split(" ")[0]}</span>
           <div><div style={{fontSize:12,fontWeight:800,color:activeEvent.gameMode==="king"?G.gold:G.purple}}>{gm?.label}</div><div style={{fontSize:10,color:G.muted}}>{gm?.desc}</div></div>
         </div>;})()}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:14}}>{courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} onSub={setSubCourt} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}</div>
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(numCourts,5)},1fr)`,gap:10,marginBottom:14}}>{courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} onSub={setSubCourt} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}</div>
         {queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>⚔️ HÀNG CHỜ ({queue.length})</div><div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={assign}/>)}</div></>}
       </div>}
       {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onEdit={setEditingPlayer} onResetAll={()=>{if(!confirm("Reset ELO + Kootoro TẤT CẢ về mùa mới?"))return;setPlayers(p=>p.map(x=>({...x,elo:SKILL_ELO[x.skill]||1200,baseElo:SKILL_ELO[x.skill]||1200,kootoro:0,gamesPlayed:0,wins:0,lastPartners:[]})));showT("🔄 Reset tất cả xong!","warn");}}/>}
