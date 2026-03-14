@@ -369,18 +369,33 @@ function Login({accounts,onLogin,loading}){
 // ══════════════════════════════════════
 // ADMIN MODAL
 // ══════════════════════════════════════
-function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourts}){
+function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourts,onSaveAccounts}){
   const [tab,setTab]=useState("viewer");
   const [nm,setNm]=useState(""),[pw,setPw]=useState(""),[err,setErr]=useState("");
   const isSA=me?.role===ROLES.SA;
   const addHost=()=>{
-    if(!nm.trim()){setErr("Nhập tên");return;}if(!pw.trim()){setErr("Nhập mật khẩu");return;}
+    if(!nm.trim()){setErr("Nhập tên");return;}
+    if(!pw.trim()){setErr("Nhập mật khẩu");return;}
     if([...(accounts.admins||[]),...(accounts.hosts||[])].some(u=>u.name.toLowerCase()===nm.trim().toLowerCase())){setErr("Tên đã tồn tại");return;}
-    setAccounts(p=>({...p,hosts:[...(p.hosts||[]),{id:`h_${uid()}`,name:nm.trim(),role:ROLES.HOST,password:pw.trim()}]}));
-    setNm("");setPw("");setErr("");toast(`Host "${nm.trim()}" đã thêm 🎮`);
+    const newAccounts={...accounts,hosts:[...(accounts.hosts||[]),{id:`h_${uid()}`,name:nm.trim(),role:ROLES.HOST,password:pw.trim()}]};
+    setAccounts(newAccounts);
+    onSaveAccounts(newAccounts); // lưu Firebase ngay
+    setNm("");setPw("");setErr("");
+    toast(`Host "${nm.trim()}" đã thêm 🎮`);
   };
-  const delHost=id=>{setAccounts(p=>({...p,hosts:(p.hosts||[]).filter(h=>h.id!==id)}));toast("Đã xoá host");};
-  const regenCode=()=>{const c=genCode();setAccounts(p=>({...p,viewerCode:c}));toast(`Mã viewer mới: ${c} 🔄`);};
+  const delHost=id=>{
+    const newAccounts={...accounts,hosts:(accounts.hosts||[]).filter(h=>h.id!==id)};
+    setAccounts(newAccounts);
+    onSaveAccounts(newAccounts);
+    toast("Đã xoá host");
+  };
+  const regenCode=()=>{
+    const c=genCode();
+    const newAccounts={...accounts,viewerCode:c};
+    setAccounts(newAccounts);
+    onSaveAccounts(newAccounts);
+    toast(`Mã viewer mới: ${c} 🔄`);
+  };
   return <MBox title="⚙️ Cài đặt" sub="Hosts · Viewer · Sân · Mật khẩu" onClose={onClose} w={560}>
     <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:`1px solid ${G.border}`,paddingBottom:8,flexWrap:"wrap"}}>
       {[{id:"viewer",l:"👁 Viewer"},{id:"courts",l:"🏟️ Số sân"},{id:"hosts",l:"🎮 Hosts"},{id:"pass",l:"🔐 Mật khẩu"}].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===t.id?G.accent+"22":"transparent",color:tab===t.id?G.accent:G.muted,borderBottom:tab===t.id?`2px solid ${G.accent}`:"2px solid transparent"}}>{t.l}</button>)}
@@ -419,16 +434,18 @@ function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourt
         <button onClick={addHost} style={{...bP,width:"100%"}}>➕ Thêm Host</button>
       </>}
     </>}
-    {tab==="pass"&&<ChgPass me={me} accounts={accounts} setAccounts={setAccounts} toast={toast}/>}
+    {tab==="pass"&&<ChgPass me={me} accounts={accounts} setAccounts={setAccounts} toast={toast} onSave={onSaveAccounts}/>}
   </MBox>;
 }
-function ChgPass({me,accounts,setAccounts,toast}){
+function ChgPass({me,accounts,setAccounts,toast,onSave}){
   const [o,setO]=useState(""),[n,setN]=useState(""),[c2,setC2]=useState(""),[err,setErr]=useState("");
   const go=()=>{
     if(me.password!==o){setErr("Mật khẩu cũ không đúng");return;}
     if(n.length<4){setErr("Tối thiểu 4 ký tự");return;}
     if(n!==c2){setErr("Xác nhận không khớp");return;}
-    setAccounts(p=>({...p,admins:(p.admins||[]).map(a=>a.id===me.id?{...a,password:n}:a),hosts:(p.hosts||[]).map(h=>h.id===me.id?{...h,password:n}:h)}));
+    const newAccounts={...accounts,admins:(accounts.admins||[]).map(a=>a.id===me.id?{...a,password:n}:a),hosts:(accounts.hosts||[]).map(h=>h.id===me.id?{...h,password:n}:h)};
+    setAccounts(newAccounts);
+    onSave(newAccounts); // lưu Firebase ngay
     setO("");setN("");setC2("");setErr("");toast("Đã đổi mật khẩu 🔐");
   };
   return <>
@@ -1626,9 +1643,15 @@ function App(){
     }
     setLoading(false);
 
-    // Subscribe Firebase realtime — tự động sync khi Admin/Host thay đổi data
+    // Subscribe Firebase realtime
+    // Chỉ apply nếu là thiết bị KHÁC đang update (không phải mình vừa save)
     const unsub = window.STORE?.subscribe((db) => {
-      console.log('🔄 Firebase realtime update');
+      // Bỏ qua nếu update đến trong vòng 3 giây sau khi mình vừa save
+      if(window._lastSaveAt && Date.now() - window._lastSaveAt < 3000) {
+        console.log('⏭️ Skipping own update');
+        return;
+      }
+      console.log('🔄 Firebase update from other device');
       applyDb(db);
     });
     if(unsub) unsubRef.current = unsub;
@@ -1636,10 +1659,11 @@ function App(){
     return () => { if(unsubRef.current) unsubRef.current(); };
   }, [applyDb]);
 
-  // ── SAVE — ghi vào localStorage + Firebase mỗi khi data thay đổi
+  // ── SAVE — ghi vào Firebase
   const saveAll = useCallback((extra={})=>{
     const st = {accounts,events,players,history,courts,queue,activeEventId,numCourts,...extra};
     setSaving(true);
+    window._lastSaveAt = Date.now(); // đánh dấu thời điểm save để subscribe bỏ qua
     STORE.save({
       accounts: st.accounts,
       events: st.events,
@@ -1707,8 +1731,7 @@ function App(){
   };
   const endEvent = () => {
     if(!activeEvent) return;
-    if(!confirm(`Kết thúc event "${activeEvent.name}"?`)) return;
-    // Đánh dấu event đã kết thúc, GIỮ lại history
+    // Không dùng confirm() vì iOS Safari block
     const newEvents = events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
     setEvents(newEvents);
     setActiveEventId(null);
@@ -1826,9 +1849,14 @@ function App(){
   };
 
   const toggleCI=id=>{
-    const p=players.find(p=>p.id===id);if(!p)return;
-    setPlayers(pp=>pp.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x));
-    showT(`${safe(p.name)} ${p.checkedIn?"rời session":"check in ✅"}`);
+    setPlayers(prev=>{
+      const upd=prev.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x);
+      const p=prev.find(p=>p.id===id);
+      showT(`${safe(p?.name)} ${p?.checkedIn?"rời session":"check in ✅"}`);
+      // Lưu ngay — không dùng debounce để tránh bị Firebase overwrite
+      setTimeout(()=>saveAll({players:upd}),0);
+      return upd;
+    });
   };
 
   // Thay người khi bận
@@ -1883,7 +1911,7 @@ function App(){
     {modal==="qr"       &&<QRModal players={players} onRegister={handleRegister} onCheckInAll={handleCheckInAll} onClose={()=>setModal(null)}/>}
     {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
-    {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts}/>}
+    {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts} onSaveAccounts={newAcc=>saveAll({accounts:newAcc})}/>}
     {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
     {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
     {subCourt&&<SubModal court={subCourt} players={players} playIds={playIds} onSub={subPlayer} onClose={()=>setSubCourt(null)}/>}
