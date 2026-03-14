@@ -546,13 +546,14 @@ function SubModal({court,players,playIds,onSub,onClose}){
 // ══════════════════════════════════════
 // QR MODAL
 // ══════════════════════════════════════
-function QRModal({players,onRegister,onClose}){
+function QRModal({players,onRegister,onClose,onCheckInAll}){
   const [step,setStep]=useState("scan"),[sname,setSname]=useState("");
   const [form,setForm]=useState({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});
   const [err,setErr]=useState(""),[added,setAdded]=useState(null),[search,setSearch]=useState("");
   const sq=safe(search).toLowerCase();
   const filtered=players.filter(p=>p&&p.name&&safe(p.name).toLowerCase().includes(sq));
   const checkedIn=players.filter(p=>p&&p.checkedIn&&p.name);
+  const notIn=players.filter(p=>p&&p.name&&!p.checkedIn);
   const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
   const simulate=()=>{
     const ni=players.filter(p=>p&&!p.checkedIn&&p.name);
@@ -570,11 +571,15 @@ function QRModal({players,onRegister,onClose}){
     <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:18,width:490,maxWidth:"96vw",maxHeight:"94vh",overflowY:"auto"}}>
       <div style={{padding:"18px 22px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div><div style={{fontSize:16,fontWeight:800,color:G.text}}>{step==="scan"?"📷 QR Check-in":step==="form"?"📝 Đăng ký":"✅ Check in!"}</div>
-          <div style={{fontSize:10,color:G.muted,marginTop:2}}>{step==="scan"?"Quét mã hoặc tìm tên":step==="form"?"Điền thông tin":"Vào hàng chờ"}</div></div>
+          <div style={{fontSize:10,color:G.muted,marginTop:2}}>{step==="scan"?`${checkedIn.length} đã vào · ${notIn.length} chưa vào`:step==="form"?"Điền thông tin":"Vào hàng chờ"}</div></div>
         <button onClick={onClose} style={{...bS,padding:"4px 9px",fontSize:14}}>✕</button>
       </div>
       <div style={{padding:"14px 22px 22px"}}>
         {step==="scan"&&<>
+          {/* Check-in tất cả */}
+          {notIn.length>0&&<button onClick={()=>{if(confirm(`Check-in tất cả ${notIn.length} người chưa vào?`))onCheckInAll();}} style={{...bP,width:"100%",marginBottom:10,background:`linear-gradient(135deg,${G.accent},${G.blue})`,padding:"11px 0",fontSize:13}}>
+            ✅ Check-in tất cả ({notIn.length} người)
+          </button>}
           <div style={{background:G.card,borderRadius:12,padding:18,textAlign:"center",marginBottom:14,border:`1px solid ${G.border}`}}>
             <div style={{width:100,height:100,margin:"0 auto 10px",background:G.dim+"44",borderRadius:10,border:`2px dashed ${G.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36}}>⬛</div>
             <div style={{fontSize:11,color:G.muted,marginBottom:12}}>Hướng camera vào QR code</div>
@@ -1688,11 +1693,11 @@ function App(){
     const newEvents = [...events, ev];
     setEvents(newEvents);
     setActiveEventId(ev.id);
-    setHistory([]); // reset history for new event
     setQueue([]);
-    setPlayers(p=>p.map(x=>({...x,checkedIn:false}))); // reset checkins
-    showT(`🗓️ Event "${ev.name}" đã tạo! Đang bắt đầu...`);
-    saveAll({events:newEvents, activeEventId:ev.id, history:[], queue:[]});
+    setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
+    showT(`🗓️ Event "${ev.name}" đã tạo!`);
+    saveAll({events:newEvents, activeEventId:ev.id, queue:[], players:players.map(x=>({...x,checkedIn:false}))});
+    setModal(null);
   };
   const editEvent = (ev) => {
     const newEvents = events.map(e=>e.id===ev.id?ev:e);
@@ -1702,22 +1707,37 @@ function App(){
   };
   const endEvent = () => {
     if(!activeEvent) return;
-    showT(`Event "${activeEvent.name}" kết thúc. Lịch sử đã lưu 💾`);
+    if(!confirm(`Kết thúc event "${activeEvent.name}"?`)) return;
+    // Đánh dấu event đã kết thúc, GIỮ lại history
+    const newEvents = events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
+    setEvents(newEvents);
     setActiveEventId(null);
-    setHistory([]);
     setQueue([]);
     setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
-    saveAll({activeEventId:null, history:[], queue:[]});
+    showT(`Event "${activeEvent.name}" kết thúc 💾`);
+    saveAll({events:newEvents, activeEventId:null, queue:[], players:players.map(x=>({...x,checkedIn:false}))});
   };
 
   const handleRegister=data=>{
     setPlayers(prev=>{
       const ex=prev.find(p=>p.id===data.id);
-      let upd=ex?prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true}:p):[...prev,{...data,checkedIn:true}];
-      if(data.coupleWithId&&data.coupleId) upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
+      let upd=ex
+        ? prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true}:p)
+        : [...prev,{...data,checkedIn:true}];
+      if(data.coupleWithId&&data.coupleId)
+        upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
+      setTimeout(()=>saveAll({players:upd}), 0);
       return upd;
     });
     showT(`${safe(data.name)} đã check in! 🎉`);
+  };
+
+  const handleCheckInAll=()=>{
+    const upd=players.map(p=>p?.name?{...p,checkedIn:true}:p);
+    setPlayers(upd);
+    const cnt=upd.filter(p=>p?.checkedIn).length;
+    showT(`✅ Check-in tất cả ${cnt} người!`);
+    saveAll({players:upd});
   };
 
   const genQueue=()=>{
@@ -1860,7 +1880,7 @@ function App(){
     {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
 
     {/* MODALS */}
-    {modal==="qr"       &&<QRModal players={players} onRegister={handleRegister} onClose={()=>setModal(null)}/>}
+    {modal==="qr"       &&<QRModal players={players} onRegister={handleRegister} onCheckInAll={handleCheckInAll} onClose={()=>setModal(null)}/>}
     {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
     {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts}/>}
