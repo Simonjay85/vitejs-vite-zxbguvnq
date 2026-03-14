@@ -1601,6 +1601,9 @@ function App(){
   const [toast,    setToast]    = useState(null);
   const [elapsed,  setElapsed]  = useState({});
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
+  // Refs để saveAll luôn dùng state mới nhất — tránh stale closure
+  const stateRef = useRef({});
+  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts};
 
   // Persist me vào sessionStorage — sống qua F5, chết khi đóng tab
   const login = (user) => {
@@ -1612,58 +1615,11 @@ function App(){
     try { sessionStorage.removeItem('pb_me'); } catch{}
   };
 
-  // Helper: áp dụng data từ DB vào state — an toàn, không overwrite nếu null
-  const applyDb = useCallback((db) => {
-    if(!db || typeof db !== 'object') return;
-    // Accounts: chỉ áp dụng nếu có admins array hợp lệ
-    if(db.accounts && Array.isArray(db.accounts.admins) && db.accounts.admins.length > 0) {
-      setAccounts(db.accounts);
-    }
-    if(Array.isArray(db.events) && db.events.length > 0) setEvents(db.events);
-    if(Array.isArray(db.players) && db.players.length > 0) setPlayers(buildSeed(db.players));
-    if(Array.isArray(db.history) && db.history.length > 0) setHistory(db.history);
-    if(db.activeEventId) setActiveEventId(db.activeEventId);
-    if(typeof db.numCourts === 'number' && db.numCourts >= 2) setNumCourts(db.numCourts);
-    if(Array.isArray(db.queue)) setQueue(db.queue);
-    if(Array.isArray(db.courts) && db.courts.length > 0) {
-      setCourts(db.courts.map(c=>({
-        ...c, startedAt: c.match && c._elapsed ? Date.now()-c._elapsed*1000 : null
-      })));
-    }
-  }, []);
-
-  // ── LOAD: dùng window.__initialData (đã load xong trước khi app mount)
-  useEffect(()=>{
-    const db = window.__initialData;
-    if(db) {
-      console.log('✅ Applying initial data');
-      applyDb(db);
-    } else {
-      console.log('⚠️ No initial data — fresh start');
-    }
-    setLoading(false);
-
-    // Subscribe Firebase realtime
-    // Chỉ apply nếu là thiết bị KHÁC đang update (không phải mình vừa save)
-    const unsub = window.STORE?.subscribe((db) => {
-      // Bỏ qua nếu update đến trong vòng 3 giây sau khi mình vừa save
-      if(window._lastSaveAt && Date.now() - window._lastSaveAt < 3000) {
-        console.log('⏭️ Skipping own update');
-        return;
-      }
-      console.log('🔄 Firebase update from other device');
-      applyDb(db);
-    });
-    if(unsub) unsubRef.current = unsub;
-
-    return () => { if(unsubRef.current) unsubRef.current(); };
-  }, [applyDb]);
-
-  // ── SAVE — ghi vào Firebase
+  // ── SAVE — luôn dùng stateRef để có state mới nhất
   const saveAll = useCallback((extra={})=>{
-    const st = {accounts,events,players,history,courts,queue,activeEventId,numCourts,...extra};
+    const st = {...stateRef.current, ...extra};
     setSaving(true);
-    window._lastSaveAt = Date.now(); // đánh dấu thời điểm save để subscribe bỏ qua
+    window._lastSaveAt = Date.now();
     STORE.save({
       accounts: st.accounts,
       events: st.events,
@@ -1674,22 +1630,64 @@ function App(){
         id:p.id, name:p.name, gender:p.gender, skill:p.skill, elo:p.elo, baseElo:p.baseElo||p.elo,
         dtype:p.dtype, coupleId:p.coupleId||null, coupleType:p.coupleType||null,
         gamesPlayed:p.gamesPlayed||0, wins:p.wins||0, lastPartners:p.lastPartners||[],
-        createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", kootoro:p.kootoro||0
+        createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", kootoro:p.kootoro||0,
+        checkedIn:p.checkedIn||false
       })),
       courts: st.courts.map(c=>({
         ...c, _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0
       })),
       queue: st.queue,
     });
-    setTimeout(()=>setSaving(false), 300);
-  },[accounts,events,players,history,courts,queue,activeEventId,numCourts]);
+    setTimeout(()=>setSaving(false), 500);
+  },[]); // không có dependency — dùng stateRef
 
-  // Auto-save sau mỗi thay đổi (debounce 800ms)
+  // Helper: áp dụng data từ DB vào state
+  const applyDb = useCallback((db) => {
+    if(!db || typeof db !== 'object') return;
+    if(db.accounts && Array.isArray(db.accounts.admins) && db.accounts.admins.length > 0)
+      setAccounts(db.accounts);
+    if(Array.isArray(db.events) && db.events.length > 0) setEvents(db.events);
+    if(Array.isArray(db.players) && db.players.length > 0) setPlayers(buildSeed(db.players));
+    if(Array.isArray(db.history) && db.history.length > 0) setHistory(db.history);
+    if(db.activeEventId !== undefined) setActiveEventId(db.activeEventId||null);
+    if(typeof db.numCourts === 'number' && db.numCourts >= 2) setNumCourts(db.numCourts);
+    if(Array.isArray(db.queue)) setQueue(db.queue);
+    if(Array.isArray(db.courts) && db.courts.length > 0) {
+      setCourts(db.courts.map(c=>({
+        ...c, startedAt: c.match && c._elapsed ? Date.now()-c._elapsed*1000 : null
+      })));
+    }
+  }, []);
+
+  // ── LOAD
+  useEffect(()=>{
+    const db = window.__initialData;
+    if(db) applyDb(db);
+    setLoading(false);
+
+    // Subscribe: chỉ áp dụng khi update đến từ thiết bị KHÁC
+    const unsub = window.STORE?.subscribe((db) => {
+      const gap = window._lastSaveAt ? Date.now() - window._lastSaveAt : 99999;
+      if(gap < 5000) {
+        console.log(`⏭️ Skip own update (${gap}ms ago)`);
+        return;
+      }
+      console.log('🔄 Remote update');
+      applyDb(db);
+    });
+    if(unsub) unsubRef.current = unsub;
+    return () => { if(unsubRef.current) unsubRef.current(); };
+  }, [applyDb]);
+
+  // Auto-save debounce 2s — chỉ cho history/courts/queue (player/accounts save trực tiếp)
   useEffect(()=>{
     if(!me||me.role===ROLES.VIEWER) return;
     clearTimeout(saveRef.current);
-    saveRef.current=setTimeout(()=>saveAll(),800);
-  },[players,history,accounts,events,courts,queue,activeEventId,me]);
+    saveRef.current=setTimeout(()=>{
+      window._lastSaveAt=Date.now();
+      saveAll();
+    },2000);
+  },[history,courts,queue,activeEventId,numCourts,me]);
 
   // Timer cho sân
   useEffect(()=>{
@@ -1741,6 +1739,14 @@ function App(){
     saveAll({events:newEvents, activeEventId:null, queue:[], players:players.map(x=>({...x,checkedIn:false}))});
   };
 
+  const serializePlayers=pl=>pl.map(p=>({
+    id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.baseElo||p.elo,
+    dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
+    gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
+    createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
+    checkedIn:p.checkedIn||false
+  }));
+
   const handleRegister=data=>{
     setPlayers(prev=>{
       const ex=prev.find(p=>p.id===data.id);
@@ -1749,7 +1755,8 @@ function App(){
         : [...prev,{...data,checkedIn:true}];
       if(data.coupleWithId&&data.coupleId)
         upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
-      setTimeout(()=>saveAll({players:upd}), 0);
+      window._lastSaveAt=Date.now();
+      STORE.save({...stateRef.current,players:serializePlayers(upd)});
       return upd;
     });
     showT(`${safe(data.name)} đã check in! 🎉`);
@@ -1758,9 +1765,9 @@ function App(){
   const handleCheckInAll=()=>{
     const upd=players.map(p=>p?.name?{...p,checkedIn:true}:p);
     setPlayers(upd);
-    const cnt=upd.filter(p=>p?.checkedIn).length;
-    showT(`✅ Check-in tất cả ${cnt} người!`);
-    saveAll({players:upd});
+    showT(`✅ Check-in tất cả ${upd.filter(p=>p?.checkedIn).length} người!`);
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current,players:serializePlayers(upd)});
   };
 
   const genQueue=()=>{
@@ -1853,8 +1860,15 @@ function App(){
       const upd=prev.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x);
       const p=prev.find(p=>p.id===id);
       showT(`${safe(p?.name)} ${p?.checkedIn?"rời session":"check in ✅"}`);
-      // Lưu ngay — không dùng debounce để tránh bị Firebase overwrite
-      setTimeout(()=>saveAll({players:upd}),0);
+      // Dùng stateRef nên saveAll luôn có players mới nhất
+      window._lastSaveAt = Date.now();
+      STORE.save({...stateRef.current, players:upd.map(p=>({
+        id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.baseElo||p.elo,
+        dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
+        gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
+        createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
+        checkedIn:p.checkedIn||false
+      }))});
       return upd;
     });
   };
