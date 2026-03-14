@@ -1609,6 +1609,13 @@ function App(){
   const login = (user) => {
     setMe(user);
     try { sessionStorage.setItem('pb_me', JSON.stringify(user)); } catch{}
+    // Sau khi login, load lại data mới nhất từ Firebase để đồng bộ
+    window.STORE?.load().then(db => {
+      if(db) {
+        console.log('🔄 Post-login Firebase sync');
+        applyDb(db);
+      }
+    }).catch(()=>{});
   };
   const logout = () => {
     setMe(null);
@@ -1666,17 +1673,27 @@ function App(){
     setLoading(false);
 
     // Subscribe Firebase realtime
-    const unsub = window.STORE?.subscribe((db) => {
-      // Admin/Host: KHÔNG bao giờ nhận update từ Firebase về
-      // Họ là người ghi data, không cần đọc lại
-      // Viewer: luôn nhận update realtime
-      const role = (() => { try { const s=sessionStorage.getItem('pb_me'); return s?JSON.parse(s)?.role:null; } catch{return null;} })();
-      if(role && role !== ROLES.VIEWER) {
-        // Chỉ áp dụng accounts mới nhất (để host mới đăng nhập được)
-        if(db?.accounts?.admins?.length > 0) setAccounts(db.accounts);
+    // - Lần đầu tiên (initialLoad): LUÔN apply cho mọi role — đảm bảo đồng bộ khi mở app
+    // - Các lần sau: Admin/Host bỏ qua (họ là người ghi), Viewer luôn nhận
+    let isInitialLoad = true;
+    const unsub = window.STORE?.subscribe((fbData) => {
+      if(isInitialLoad) {
+        // Lần đầu subscribe luôn fire ngay — đây là data mới nhất từ Firebase
+        // Luôn apply bất kể role để đảm bảo đồng bộ
+        console.log('📡 Initial subscribe — applying latest Firebase data');
+        applyDb(fbData);
+        isInitialLoad = false;
         return;
       }
-      applyDb(db);
+      // Các update sau: Viewer nhận realtime, Admin/Host bỏ qua
+      const role = (() => { try { const s=sessionStorage.getItem('pb_me'); return s?JSON.parse(s)?.role:null; } catch{return null;} })();
+      if(role && role !== ROLES.VIEWER) {
+        // Vẫn sync accounts để host mới thêm vào đăng nhập được
+        if(fbData?.accounts?.admins?.length > 0) setAccounts(fbData.accounts);
+        return;
+      }
+      console.log('🔄 Viewer realtime update');
+      applyDb(fbData);
     });
     if(unsub) unsubRef.current = unsub;
     return () => { if(unsubRef.current) unsubRef.current(); };
