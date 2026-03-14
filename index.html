@@ -1665,21 +1665,24 @@ function App(){
     if(db) applyDb(db);
     setLoading(false);
 
-    // Subscribe: chỉ áp dụng khi update đến từ thiết bị KHÁC
+    // Subscribe Firebase realtime
     const unsub = window.STORE?.subscribe((db) => {
-      const gap = window._lastSaveAt ? Date.now() - window._lastSaveAt : 99999;
-      if(gap < 5000) {
-        console.log(`⏭️ Skip own update (${gap}ms ago)`);
+      // Admin/Host: KHÔNG bao giờ nhận update từ Firebase về
+      // Họ là người ghi data, không cần đọc lại
+      // Viewer: luôn nhận update realtime
+      const role = (() => { try { const s=sessionStorage.getItem('pb_me'); return s?JSON.parse(s)?.role:null; } catch{return null;} })();
+      if(role && role !== ROLES.VIEWER) {
+        // Chỉ áp dụng accounts mới nhất (để host mới đăng nhập được)
+        if(db?.accounts?.admins?.length > 0) setAccounts(db.accounts);
         return;
       }
-      console.log('🔄 Remote update');
       applyDb(db);
     });
     if(unsub) unsubRef.current = unsub;
     return () => { if(unsubRef.current) unsubRef.current(); };
   }, [applyDb]);
 
-  // Auto-save debounce 2s — chỉ cho history/courts/queue (player/accounts save trực tiếp)
+  // Auto-save debounce 2s
   useEffect(()=>{
     if(!me||me.role===ROLES.VIEWER) return;
     clearTimeout(saveRef.current);
