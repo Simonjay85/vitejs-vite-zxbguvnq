@@ -1712,31 +1712,39 @@ function App(){
 
   // ── EVENT MANAGEMENT
   const createEvent = (ev) => {
-    const newEvents = [...events, ev];
+    const newEvents = [...stateRef.current.events, ev];
+    // Giữ nguyên players, chỉ reset checkedIn — data players được GIỮ LẠI cho event sau
+    const resetPlayers = serializePlayers(stateRef.current.players.map(x=>({...x,checkedIn:false})));
     setEvents(newEvents);
     setActiveEventId(ev.id);
     setQueue([]);
-    setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
-    showT(`🗓️ Event "${ev.name}" đã tạo!`);
-    saveAll({events:newEvents, activeEventId:ev.id, queue:[], players:players.map(x=>({...x,checkedIn:false}))});
+    setPlayers(resetPlayers);
+    showT(`🗓️ Event "${ev.name}" đã tạo! ${resetPlayers.length} người chơi sẵn sàng.`);
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current, events:newEvents, activeEventId:ev.id, queue:[], players:resetPlayers});
     setModal(null);
   };
+
   const editEvent = (ev) => {
-    const newEvents = events.map(e=>e.id===ev.id?ev:e);
+    const newEvents = stateRef.current.events.map(e=>e.id===ev.id?ev:e);
     setEvents(newEvents);
     showT("Event đã cập nhật ✏️");
-    saveAll({events:newEvents});
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current, events:newEvents});
   };
+
   const endEvent = () => {
     if(!activeEvent) return;
-    // Không dùng confirm() vì iOS Safari block
-    const newEvents = events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
+    const newEvents = stateRef.current.events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
+    // Giữ nguyên players với ELO/stats đã cập nhật — chỉ reset checkedIn
+    const resetPlayers = serializePlayers(stateRef.current.players.map(x=>({...x,checkedIn:false})));
     setEvents(newEvents);
     setActiveEventId(null);
     setQueue([]);
-    setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
-    showT(`Event "${activeEvent.name}" kết thúc 💾`);
-    saveAll({events:newEvents, activeEventId:null, queue:[], players:players.map(x=>({...x,checkedIn:false}))});
+    setPlayers(resetPlayers);
+    showT(`Event "${activeEvent.name}" kết thúc 💾 · ${resetPlayers.length} người chơi đã lưu.`);
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current, events:newEvents, activeEventId:null, queue:[], players:resetPlayers});
   };
 
   const serializePlayers=pl=>pl.map(p=>({
@@ -1787,17 +1795,37 @@ function App(){
   };
 
   const assign=(cid,mdata)=>{
-    setCourts(p=>p.map(c=>c.id===cid?{...c,match:{...mdata},startedAt:Date.now()}:c));
-    setQueue(p=>p.filter(q=>q!==mdata));
+    const newCourts=stateRef.current.courts.map(c=>c.id===cid?{...c,match:{...mdata},startedAt:Date.now()}:c);
+    const newQueue=stateRef.current.queue.filter(q=>q!==mdata);
+    setCourts(newCourts);
+    setQueue(newQueue);
     showT(`Trận bắt đầu tại ${courts.find(c=>c.id===cid)?.name}! 🏓`);
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current,
+      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      queue:newQueue
+    });
   };
+
   const autoAssign=()=>{
-    const free=courts.filter(c=>!c.match);
+    const free=stateRef.current.courts.filter(c=>!c.match);
     if(!free.length){showT("Không có sân trống!","warn");return;}
-    if(!queue.length){showT("Queue trống!","warn");return;}
-    let q=[...queue];
-    free.forEach(c=>{if(!q.length)return;const m=q.shift();setCourts(p=>p.map(x=>x.id===c.id?{...x,match:m,startedAt:Date.now()}:x));});
-    setQueue(q);showT("Đã gán ▶");
+    if(!stateRef.current.queue.length){showT("Queue trống!","warn");return;}
+    let q=[...stateRef.current.queue];
+    let newCourts=[...stateRef.current.courts];
+    free.forEach(c=>{
+      if(!q.length)return;
+      const m=q.shift();
+      newCourts=newCourts.map(x=>x.id===c.id?{...x,match:m,startedAt:Date.now()}:x);
+    });
+    setCourts(newCourts);
+    setQueue(q);
+    showT(`Đã gán ${free.length - (stateRef.current.queue.length - q.length < free.length ? 0:0)} trận ▶`);
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current,
+      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      queue:q
+    });
   };
 
   const handleScore=(w,sw,sl)=>{
@@ -1812,45 +1840,50 @@ function App(){
     const newHEntry={id:uid(),eventId:activeEventId,courtId:scoreTarget,dtype:m.dtype,team1:m.team1.filter(Boolean),team2:m.team2.filter(Boolean),winner:w,scoreWinner:sw,scoreLoser:sl,score:`${w===1?sw:sl}-${w===1?sl:sw}`,eloDelta:delta,time:nowStr()};
     const newHistory=[newHEntry,...history];
     setHistory(newHistory);
-    setPlayers(p=>p.map(x=>{
+
+    const gm=activeEvent?.gameMode||"normal";
+    // Tính toán courts và queue mới trước khi set state
+    let newCourts=[...stateRef.current.courts];
+    let newQueue=[...stateRef.current.queue];
+
+    if(gm==="king"&&courtIdx===0){
+      newCourts=newCourts.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
+      newQueue=[{team1:wT,team2:wT,dtype:m.dtype,keepWinner:true},...newQueue];
+    } else if(gm==="ladder"){
+      newCourts=newCourts.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
+      const winnerNextIdx=Math.max(0,courtIdx-1);
+      const loserNextIdx=Math.min(newCourts.length-1,courtIdx+1);
+      const promoted={team1:wT.slice(0,2),team2:wT.slice(0,2),dtype:m.dtype,promoteTo:winnerNextIdx,custom:true};
+      const demoted={team1:lT.slice(0,2),team2:lT.slice(0,2),dtype:m.dtype,promoteTo:loserNextIdx,custom:true};
+      newQueue=[promoted,demoted,...newQueue];
+    } else {
+      newCourts=newCourts.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
+    }
+
+    setCourts(newCourts);
+    setQueue(newQueue);
+    setScoreTarget(null);
+
+    // Tính players mới
+    const newPlayers=stateRef.current.players.map(x=>{
       const isW=wT.some(v=>v.id===x.id),isL=lT.some(v=>v.id===x.id);
       if(!isW&&!isL)return x;
       const lp=np[x.id]?[np[x.id],...(x.lastPartners||[])].slice(0,4):x.lastPartners||[];
       const updP={...x,elo:x.elo+(isW?delta:-delta),gamesPlayed:(x.gamesPlayed||0)+1,wins:(x.wins||0)+(isW?1:0),lastPartners:lp};
       updP.kootoro=Math.round(kootoro(updP,newHistory)*10)/10;
       return updP;
-    }));
-
-    const gm=activeEvent?.gameMode||"normal";
-    setCourts(prev=>{
-      let next=[...prev];
-      if(gm==="king"){
-        // King: winner stays on court 0 (sân vua), loser goes to bottom queue
-        if(courtIdx===0){
-          // Winners stay, losers go to queue — just clear court so new challenger comes in
-          next=next.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
-          // Put winners back first in queue for court 0
-          setQueue(q=>[{team1:wT,team2:wT,dtype:m.dtype,keepWinner:true},...q]); // signal to keep winner
-        } else {
-          next=next.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
-        }
-      } else if(gm==="ladder"){
-        // Ladder: winners move UP one court, losers move DOWN one court
-        next=next.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
-        const winnerNextIdx=Math.max(0,courtIdx-1);
-        const loserNextIdx=Math.min(next.length-1,courtIdx+1);
-        // Add to queue with priority flag for promotion/demotion
-        setQueue(q=>{
-          const promoted={team1:wT.slice(0,2),team2:wT.slice(0,2),dtype:m.dtype,promoteTo:winnerNextIdx,custom:true};
-          const demoted={team1:lT.slice(0,2),team2:lT.slice(0,2),dtype:m.dtype,promoteTo:loserNextIdx,custom:true};
-          return [promoted,demoted,...q];
-        });
-      } else {
-        next=next.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c);
-      }
-      return next;
     });
-    setScoreTarget(null);
+    setPlayers(newPlayers);
+
+    // Save 1 lần duy nhất với toàn bộ state mới
+    window._lastSaveAt=Date.now();
+    STORE.save({...stateRef.current,
+      history:newHistory.slice(0,1000),
+      players:serializePlayers(newPlayers),
+      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      queue:newQueue
+    });
+
     const modMsg=gm==="king"?(courtIdx===0?" 👑 Vua giữ ngai!":""):gm==="ladder"?" 🪜 Di chuyển sân!":"";
     showT(`${wT.filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join(" & ")} thắng ${sw}-${sl}! ±${delta} ELO${modMsg}`);
   };
