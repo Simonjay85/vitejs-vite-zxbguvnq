@@ -313,9 +313,12 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
   const [qrUrl,setQrUrl]=useState(event?.qrUrl||"");
   const [numCourts,setNumCourts]=useState(event?.numCourts||currentNumCourts||5);
   const [maxPlayers,setMaxPlayers]=useState(event?.maxPlayers||0);
+  const [feePerPerson,setFeePerPerson]=useState(event?.feePerPerson||0);
 
   const totalFee=(Number(courtFee)||0)+(Number(extraFee)||0);
-  const perPerson=totalFee>0&&maxPlayers>0?Math.ceil(totalFee/maxPlayers):0;
+  // Ưu tiên: feePerPerson nhập tay > tính từ tổng/số người > 0
+  const calcPerPerson = feePerPerson>0 ? feePerPerson
+    : (totalFee>0&&maxPlayers>0 ? Math.ceil(totalFee/maxPlayers) : 0);
 
   const save=()=>{
     if(!name.trim())return;
@@ -325,6 +328,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
       date:dateStr,dateISO:date,
       numCourts:Number(numCourts)||5,
       maxPlayers:Number(maxPlayers)||0,
+      feePerPerson:Number(feePerPerson)||0,
       courtFee:Number(courtFee)||0,extraFee:Number(extraFee)||0,
       feeNote:feeNote.trim(),qrUrl:qrUrl,
       id:event?.id||`ev_${uid()}`,
@@ -360,7 +364,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
           ))}
         </div>
       </Fld>
-      <Fld label="👥 SỐ NGƯỜI DỰ KIẾN" hint={maxPlayers>0&&perPerson>0?`≈ ${perPerson.toLocaleString("vi-VN")}đ/người`:"Để trống = không giới hạn"}>
+      <Fld label="👥 SỐ NGƯỜI DỰ KIẾN" hint={maxPlayers>0&&calcPerPerson>0?`≈ ${calcPerPerson.toLocaleString("vi-VN")}đ/người`:"Để trống = không giới hạn"}>
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
           {[0,8,12,16,20,24,28,32].map(n=>(
             <button key={n} onClick={()=>setMaxPlayers(n)}
@@ -401,13 +405,46 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
       <Fld label="GHI CHÚ CHI PHÍ">
         <input value={feeNote} onChange={e=>setFeeNote(e.target.value)} placeholder="VD: 4 sân × 1.5h, nước Aquafina..." style={iS}/>
       </Fld>
+
+      {/* Chi phí/người — nhập tay hoặc tự tính */}
+      <div style={{background:G.card,borderRadius:11,padding:14,border:`1px solid ${G.border}`,marginBottom:10}}>
+        <div style={{fontSize:10,color:G.gold,fontWeight:700,marginBottom:10}}>💵 CHI PHÍ MỖI NGƯỜI</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <div style={{fontSize:9,color:G.muted,marginBottom:5}}>TỰ TÍNH (từ tổng ÷ số người)</div>
+            <div style={{padding:"10px 12px",borderRadius:8,background:G.bg,border:`1px solid ${G.border}`,fontSize:14,fontWeight:900,color:totalFee>0&&maxPlayers>0?G.gold:G.dim}}>
+              {totalFee>0&&maxPlayers>0
+                ? Math.ceil(totalFee/maxPlayers).toLocaleString("vi-VN")+"đ"
+                : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:G.muted,marginBottom:5}}>NHẬP TAY (ghi đè tự tính)</div>
+            <FeeInput value={Number(feePerPerson)||0} onChange={v=>setFeePerPerson(v)} placeholder="VD: 70 = 70k"/>
+          </div>
+        </div>
+        {/* Summary box */}
+        <div style={{padding:"10px 14px",borderRadius:9,background:calcPerPerson>0?G.gold+"15":G.dim+"15",border:`1px solid ${calcPerPerson>0?G.gold+"44":G.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:11,color:G.muted}}>
+              {feePerPerson>0?"✏️ Chi phí nhập tay":"🔢 Chi phí tự tính"}
+            </div>
+            <div style={{fontSize:20,fontWeight:900,color:calcPerPerson>0?G.gold:G.dim}}>
+              {calcPerPerson>0?calcPerPerson.toLocaleString("vi-VN")+"đ":"Chưa tính được"}
+            </div>
+          </div>
+          {maxPlayers>0&&calcPerPerson>0&&<div style={{fontSize:10,color:G.muted,marginTop:4}}>
+            {maxPlayers} người × {calcPerPerson.toLocaleString("vi-VN")}đ = {(maxPlayers*calcPerPerson).toLocaleString("vi-VN")}đ
+            {totalFee>0&&<span style={{marginLeft:8,color:maxPlayers*calcPerPerson>=totalFee?"#34d399":G.red}}>
+              {maxPlayers*calcPerPerson>=totalFee?"✅ Đủ chi phí":"⚠️ Thiếu "+(totalFee-maxPlayers*calcPerPerson).toLocaleString("vi-VN")+"đ"}
+            </span>}
+          </div>}
+        </div>
+      </div>
+
       <Fld label="📷 ẢNH QR THANH TOÁN (Momo, VietQR...)">
         <QRUpload value={qrUrl} onChange={v=>setQrUrl(v)}/>
       </Fld>
-      {(Number(courtFee)||Number(extraFee))>0&&<div style={{padding:"10px 14px",borderRadius:9,background:G.gold+"12",border:`1px solid ${G.gold}33`,fontSize:11,color:G.gold}}>
-        💰 Tổng: <b>{((Number(courtFee)||0)+(Number(extraFee)||0)).toLocaleString("vi-VN")}đ</b>
-        {" · "}Mỗi người: <b>?</b> (tính sau khi biết số người)
-      </div>}
     </div>
     <Fld label="GHI CHÚ KHÁC">
       <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Thông tin thêm..." style={iS}/>
@@ -1458,7 +1495,9 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
   // Chi phí
   const total=(Number(activeEvent?.courtFee)||0)+(Number(activeEvent?.extraFee)||0);
   const ciCount=players.filter(p=>p?.checkedIn).length||1;
-  const perPerson=total>0?Math.ceil(total/ciCount):0;
+  // Ưu tiên feePerPerson nhập tay, sau đó tính từ tổng/số người
+  const perPerson=activeEvent?.feePerPerson>0 ? activeEvent.feePerPerson
+    : (total>0&&ciCount>0 ? Math.ceil(total/ciCount) : 0);
   const payQr = activeEvent?.qrUrl || accounts?.payQrUrl || "";
 
   useEffect(()=>{
@@ -1808,8 +1847,10 @@ function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
   const evPlayers=players.filter(p=>p?.checkedIn); // current event players
   const paidPlayers=evPlayers.filter(p=>p?.paid);
   const unpaidPlayers=evPlayers.filter(p=>!p?.paid);
+  // Ưu tiên: feePerPerson nhập tay > tính từ tổng/maxPlayers > tính từ số người checkin
   const denominator=ev?.maxPlayers>0?ev.maxPlayers:(evPlayers.length||1);
-  const perPerson=total>0?Math.ceil(total/denominator):0;
+  const perPerson=ev?.feePerPerson>0 ? ev.feePerPerson
+    : (total>0 ? Math.ceil(total/denominator) : 0);
   const collected=paidPlayers.reduce((s,p)=>s+(p.paidAmount||perPerson),0);
   const profit=collected-total;
 
