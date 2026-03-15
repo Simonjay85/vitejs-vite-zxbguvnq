@@ -2042,7 +2042,7 @@ function App(){
   const saveAll = useCallback((extra={})=>{
     const st = {...stateRef.current, ...extra};
     setSaving(true);
-    window._lastSaveAt = Date.now();
+    window._lastSavedAt = Date.now();
     STORE.save({
       accounts: st.accounts,
       events: st.events,
@@ -2115,16 +2115,7 @@ function App(){
     return () => { if(unsubRef.current) unsubRef.current(); };
   }, [applyDb]);
 
-  // Auto-save: chỉ cho history (không trigger với activeEventId/players/courts)
-  useEffect(()=>{
-    if(!me||me.role===ROLES.VIEWER) return;
-    if(!history.length) return;
-    clearTimeout(saveRef.current);
-    saveRef.current=setTimeout(()=>{
-      window._lastSavedAt=Date.now();
-      saveAll();
-    },5000);
-  },[history,me]);
+  // Không dùng auto-save — mọi action đều save trực tiếp để tránh race condition
 
   // Timer cho sân
   useEffect(()=>{
@@ -2157,7 +2148,7 @@ function App(){
     setQueue([]);
     setPlayers(resetPlayers);
     showT(`🗓️ Event "${ev.name}" đã tạo! ${resetPlayers.length} người chơi sẵn sàng.`);
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current, events:newEvents, activeEventId:ev.id, queue:[], players:resetPlayers});
     setModal(null);
   };
@@ -2166,7 +2157,7 @@ function App(){
     const newEvents = stateRef.current.events.map(e=>e.id===ev.id?ev:e);
     setEvents(newEvents);
     showT("Event đã cập nhật ✏️");
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current, events:newEvents});
   };
 
@@ -2193,8 +2184,7 @@ function App(){
     setActiveEventId(null);
     setQueue([]);
     setPlayers(resetPlayers);
-    showT(`Event "${activeEvent.name}" kết thúc 💾 · ${resetPlayers.length} người chơi đã lưu.`);
-    window._lastSaveAt=Date.now();
+    showT(`Event "${activeEvent.name}" kết thúc 💾`);
     STORE.save({...stateRef.current, events:newEvents, activeEventId:null, queue:[], players:resetPlayers});
   };
 
@@ -2216,7 +2206,7 @@ function App(){
         : [...prev,{...data,checkedIn:true}];
       if(data.coupleWithId&&data.coupleId)
         upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
-      window._lastSaveAt=Date.now();
+      window._lastSavedAt=Date.now();
       STORE.save({...stateRef.current,players:serializePlayers(upd)});
       return upd;
     });
@@ -2227,7 +2217,7 @@ function App(){
     const upd=players.map(p=>p?.name?{...p,checkedIn:true}:p);
     setPlayers(upd);
     showT(`✅ Check-in tất cả ${upd.filter(p=>p?.checkedIn).length} người!`);
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,players:serializePlayers(upd)});
   };
 
@@ -2253,7 +2243,7 @@ function App(){
     setCourts(newCourts);
     setQueue(newQueue);
     showT(`Trận bắt đầu tại ${courts.find(c=>c.id===cid)?.name}! 🏓`);
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
       courts:newCourts.map(c=>({...c,
         _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0,
@@ -2277,7 +2267,7 @@ function App(){
     setCourts(newCourts);
     setQueue(q);
     showT(`Đã gán ${free.length - (stateRef.current.queue.length - q.length < free.length ? 0:0)} trận ▶`);
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
       courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
       queue:q
@@ -2332,7 +2322,7 @@ function App(){
     setPlayers(newPlayers);
 
     // Save 1 lần duy nhất với toàn bộ state mới
-    window._lastSaveAt=Date.now();
+    window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
       history:newHistory.slice(0,1000),
       players:serializePlayers(newPlayers),
@@ -2351,7 +2341,7 @@ function App(){
       const newCI = p.checkedIn !== true; // toggle chính xác
       const upd=prev.map(x=>x.id===id?{...x,checkedIn:newCI}:x);
       showT(`${safe(p.name)} ${newCI?"check in ✅":"rời session"}`);
-      window._lastSaveAt = Date.now();
+      window._lastSavedAt = Date.now();
       STORE.save({...stateRef.current, players:serializePlayers(upd)});
       return upd;
     });
@@ -2360,21 +2350,28 @@ function App(){
   // Thay người khi bận
   const subPlayer=(cid,pOut,pIn)=>{
     if(!pOut||!pIn)return;
-    setCourts(prev=>prev.map(c=>{
+    const newCourts=stateRef.current.courts.map(c=>{
       if(c.id!==cid||!c.match)return c;
       const t1=c.match.team1.map(p=>p.id===pOut.id?pIn:p);
       const t2=c.match.team2.map(p=>p.id===pOut.id?pIn:p);
       return {...c,match:{...c.match,team1:t1,team2:t2}};
-    }));
+    });
+    setCourts(newCourts);
     setSubCourt(null);
     showT(`🔄 ${safe(pOut.name)} → ${safe(pIn.name)}`);
+    window._lastSavedAt=Date.now();
+    STORE.save({...stateRef.current,
+      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0}))
+    });
   };
 
-  // Lưu thay đổi người chơi
   const savePlayer=p=>{
-    setPlayers(prev=>prev.map(x=>x.id===p.id?p:x));
+    const newPlayers=stateRef.current.players.map(x=>x.id===p.id?p:x);
+    setPlayers(newPlayers);
     setEditingPlayer(null);
     showT(`💾 Đã lưu: ${safe(p.name)}`);
+    window._lastSavedAt=Date.now();
+    STORE.save({...stateRef.current, players:serializePlayers(newPlayers)});
   };
 
   const CSS=`
@@ -2493,7 +2490,7 @@ function App(){
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
-      {tab==="cost"       &&<CostTab events={events} players={players} activeEventId={activeEventId} onUpdatePlayer={p=>{const upd=stateRef.current.players.map(x=>x.id===p.id?p:x);setPlayers(upd);window._lastSaveAt=Date.now();STORE.save({...stateRef.current,players:serializePlayers(upd)});}} onUpdateEvent={ev=>{const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);setEvents(newEvs);window._lastSaveAt=Date.now();STORE.save({...stateRef.current,events:newEvs});}}/>}
+      {tab==="cost"       &&<CostTab events={events} players={players} activeEventId={activeEventId} onUpdatePlayer={p=>{const upd=stateRef.current.players.map(x=>x.id===p.id?p:x);setPlayers(upd);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,players:serializePlayers(upd)});}} onUpdateEvent={ev=>{const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);setEvents(newEvs);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,events:newEvs});}}/>}
     </main>
   </div>;
 }
