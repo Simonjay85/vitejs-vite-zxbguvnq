@@ -2056,7 +2056,9 @@ function App(){
         dtype:p.dtype, coupleId:p.coupleId||null, coupleType:p.coupleType||null,
         gamesPlayed:p.gamesPlayed||0, wins:p.wins||0, lastPartners:p.lastPartners||[],
         createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", kootoro:p.kootoro||0,
-        checkedIn:p.checkedIn||false
+        checkedIn: p.checkedIn === true, // ← lưu đúng boolean
+        paid:p.paid||false, paidAmount:p.paidAmount||0, payMethod:p.payMethod||"transfer",
+        totalSpent:p.totalSpent||0, monthSpent:p.monthSpent||0, eventCount:p.eventCount||0
       })),
       courts: st.courts.map(c=>({
         ...c, _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0
@@ -2091,27 +2093,34 @@ function App(){
     setLoading(false);
 
     // Subscribe Firebase realtime
-    // - Lần đầu tiên (initialLoad): LUÔN apply cho mọi role — đảm bảo đồng bộ khi mở app
-    // - Các lần sau: Admin/Host bỏ qua (họ là người ghi), Viewer luôn nhận
-    let isInitialLoad = true;
+    let isFirstFire = true;
     const unsub = window.STORE?.subscribe((fbData) => {
-      if(isInitialLoad) {
-        // Lần đầu subscribe luôn fire ngay — đây là data mới nhất từ Firebase
-        // Luôn apply bất kể role để đảm bảo đồng bộ
-        console.log('📡 Initial subscribe — applying latest Firebase data');
+      if(isFirstFire) {
+        // Firebase luôn fire ngay khi subscribe — apply data mới nhất
+        console.log('📡 Firebase initial data');
         applyDb(fbData);
-        isInitialLoad = false;
+        isFirstFire = false;
         return;
       }
-      // Các update sau: Viewer nhận realtime, Admin/Host bỏ qua
-      const role = (() => { try { const s=sessionStorage.getItem('pb_me'); return s?JSON.parse(s)?.role:null; } catch{return null;} })();
-      if(role && role !== ROLES.VIEWER) {
-        // Vẫn sync accounts để host mới thêm vào đăng nhập được
-        if(fbData?.accounts?.admins?.length > 0) setAccounts(fbData.accounts);
+      // Sau lần đầu: check role từ sessionStorage
+      let role = null;
+      try { const s=sessionStorage.getItem('pb_me'); role=s?JSON.parse(s)?.role:null; } catch{}
+
+      if(!role) {
+        // Chưa login — apply full (để login page có accounts mới nhất)
+        applyDb(fbData);
         return;
       }
-      console.log('🔄 Viewer realtime update');
-      applyDb(fbData);
+      if(role === ROLES.VIEWER) {
+        // Viewer luôn nhận realtime update đầy đủ
+        applyDb(fbData);
+        return;
+      }
+      // Admin/Host: CHỈ sync accounts (để host mới thêm đăng nhập được)
+      // KHÔNG apply players/courts/queue để tránh overwrite data đang dùng
+      if(fbData?.accounts?.admins?.length > 0) {
+        setAccounts(fbData.accounts);
+      }
     });
     if(unsub) unsubRef.current = unsub;
     return () => { if(unsubRef.current) unsubRef.current(); };
