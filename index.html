@@ -48,6 +48,18 @@
     window._deviceId = Math.random().toString(36).slice(2,8);
     window._lastSavedVer = null; // ver của lần save cuối từ thiết bị này
 
+    // Xóa cache cũ nếu quá 24 giờ — tránh dùng data stale
+    try {
+      const cached = localStorage.getItem(LS_KEY);
+      if(cached) {
+        const d = JSON.parse(cached);
+        if(d._cachedAt && (Date.now() - d._cachedAt) > 24*60*60*1000) {
+          localStorage.removeItem(LS_KEY);
+          console.log('🗑️ Cleared stale cache');
+        }
+      }
+    } catch(e) {}
+
     window.STORE = {
       async save(data) {
         window._lastSavedAt = Date.now();
@@ -93,12 +105,12 @@
     };
 
     // Load Firebase ngay — lưu vào window.__initialData trước khi React mount
+    // Đây chỉ là fallback nếu subscribe timeout
     (async () => {
       try {
         window.__initialData = await window.STORE.load();
-        console.log('✅ Initial data:', window.__initialData ? 'loaded' : 'empty');
+        console.log('✅ Firebase preloaded');
       } catch(e) {
-        console.warn('Initial load failed:', e);
         window.__initialData = null;
       }
       window._fbReady = true;
@@ -2095,15 +2107,26 @@ function App(){
 
   // ── LOAD
   useEffect(()=>{
-    const initDb = window.__initialData;
-    if(initDb) applyDb(initDb);
-    setLoading(false);
+    let subscribeFired = false;
 
     // Subscribe: nhận update từ Firebase
+    // onValue luôn fire ngay với data mới nhất — đây là nguồn tin cậy nhất
     const unsub = window.STORE?.subscribe((fbData) => {
       if(!fbData) return;
 
-      // Skip nếu đây là echo từ chính mình (trong vòng 5 giây)
+      if(!subscribeFired) {
+        // Lần đầu subscribe fire = data mới nhất từ Firebase
+        // LUÔN apply, bỏ qua __initialData (có thể là cache cũ)
+        subscribeFired = true;
+        console.log('📡 Firebase sync:', fbData._updatedAt ? new Date(fbData._updatedAt).toLocaleTimeString() : '?',
+          '| checkedIn:', fbData.players?.filter(p=>p?.checkedIn).length||0,
+          '| event:', fbData.activeEventId||'none');
+        applyDb(fbData);
+        setLoading(false);
+        return;
+      }
+
+      // Các lần sau: skip echo của chính mình
       if(fbData._deviceId === window._deviceId &&
          window._lastSavedAt &&
          (Date.now() - window._lastSavedAt) < 5000) {
@@ -2111,12 +2134,28 @@ function App(){
         return;
       }
 
-      // Data từ thiết bị khác → apply để đồng bộ
-      console.log('🔄 Remote:', fbData._deviceId, 'updated:', fbData._updatedAt ? new Date(fbData._updatedAt).toLocaleTimeString() : '?');
+      // Update từ thiết bị khác
+      console.log('🔄 Remote update:', fbData._deviceId,
+        '| event:', fbData.activeEventId||'none');
       applyDb(fbData);
     });
+
+    // Fallback: nếu Firebase không kết nối được sau 5 giây, dùng cache
+    const fallbackTimer = setTimeout(() => {
+      if(!subscribeFired) {
+        console.warn('⚠️ Firebase timeout — using cached data');
+        const cached = window.__initialData;
+        if(cached) applyDb(cached);
+        setLoading(false);
+        subscribeFired = true;
+      }
+    }, 5000);
+
     if(unsub) unsubRef.current = unsub;
-    return () => { if(unsubRef.current) unsubRef.current(); };
+    return () => {
+      if(unsubRef.current) unsubRef.current();
+      clearTimeout(fallbackTimer);
+    };
   }, [applyDb]);
 
   // Không dùng auto-save — mọi action đều save trực tiếp để tránh race condition
