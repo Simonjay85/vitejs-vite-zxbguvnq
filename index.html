@@ -240,6 +240,46 @@ const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];
 const CBadge=({type})=><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:G.pink+"25",color:G.pink,fontWeight:700}}>{type==="spouse"?"💍":"💑"}</span>;
 const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?9:10,padding:sm?"1px 5px":"2px 8px",borderRadius:3,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:700}}>{label}</span>;};
 const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f59e0b"},[ROLES.HOST]:{l:"🎮 Host",c:"#a78bfa"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#4a6480"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:r.c+"20",color:r.c,fontWeight:700,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
+// Nhập số × 1000 VND — gõ 200 → 200.000đ
+const fmtK = v => v ? (Number(v)*1000).toLocaleString("vi-VN")+"đ" : "";
+const parseK = v => { const n=parseFloat(String(v).replace(/[^0-9.]/g,"")); return isNaN(n)?0:Math.round(n*1000); };
+// Input nhận đơn vị nghìn đồng
+function FeeInput({value, onChange, placeholder}){
+  // value là số nguyên VND, hiển thị dạng nghìn
+  const displayVal = value ? String(Math.round(value/1000)) : "";
+  return <div style={{position:"relative"}}>
+    <input type="number" value={displayVal}
+      onChange={e=>{ const k=parseFloat(e.target.value)||0; onChange(k*1000); }}
+      placeholder={placeholder||"VD: 200"}
+      style={{...{background:"#0f1e33",border:"1px solid #172840",borderRadius:8,padding:"8px 48px 8px 10px",color:"#dde6f5",fontSize:13,width:"100%"},outline:"none"}}/>
+    <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#4a6480",fontWeight:600,pointerEvents:"none"}}>×1.000đ</span>
+  </div>;
+}
+// Upload ảnh QR — base64
+function QRUpload({value, onChange}){
+  const ref = React.useRef();
+  const hasImg = value && value.startsWith("data:");
+  return <div>
+    <input ref={ref} type="file" accept="image/*" style={{display:"none"}}
+      onChange={e=>{
+        const f=e.target.files?.[0]; if(!f) return;
+        const reader=new FileReader();
+        reader.onload=ev=>onChange(ev.target.result);
+        reader.readAsDataURL(f);
+      }}/>
+    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      <button onClick={()=>ref.current.click()}
+        style={{padding:"8px 14px",borderRadius:8,border:"1px solid #172840",background:"transparent",color:"#00c9a7",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+        📷 {hasImg?"Đổi ảnh QR":"Upload ảnh QR"}
+      </button>
+      {hasImg&&<button onClick={()=>onChange("")}
+        style={{padding:"8px 10px",borderRadius:8,border:"1px solid #f43f5e44",background:"transparent",color:"#f43f5e",fontSize:12,cursor:"pointer"}}>✕</button>}
+    </div>
+    {hasImg&&<img src={value} style={{marginTop:8,maxWidth:140,borderRadius:10,border:"1px solid #172840"}} alt="QR"/>}
+    {!hasImg&&value&&<div style={{marginTop:6,fontSize:10,color:"#4a6480",wordBreak:"break-all"}}>{value.slice(0,60)}...</div>}
+  </div>;
+}
+
 const SaveDot=({saving})=><span title={saving?"Đang lưu...":"Đã lưu"} style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:saving?"#f59e0b":"#00c9a7",boxShadow:saving?"0 0 6px #f59e0b88":"0 0 6px #00c9a744",transition:"background .4s"}}></span>;
 
 function Toast({msg,type,onClose}){
@@ -260,7 +300,7 @@ const Fld=({label,children,hint})=><div style={{marginBottom:13}}><div style={{f
 // ══════════════════════════════════════
 // EVENT MODAL — tạo / đổi tên event
 // ══════════════════════════════════════
-function EventModal({event, onSave, onClose, isNew}){
+function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
   const today = new Date().toISOString().split('T')[0];
   const [name,setName]=useState(event?.name||"");
   const [loc,setLoc]=useState(event?.location||"");
@@ -271,14 +311,22 @@ function EventModal({event, onSave, onClose, isNew}){
   const [extraFee,setExtraFee]=useState(event?.extraFee||"");
   const [feeNote,setFeeNote]=useState(event?.feeNote||"");
   const [qrUrl,setQrUrl]=useState(event?.qrUrl||"");
+  const [numCourts,setNumCourts]=useState(event?.numCourts||currentNumCourts||5);
+  const [maxPlayers,setMaxPlayers]=useState(event?.maxPlayers||0);
+
+  const totalFee=(Number(courtFee)||0)+(Number(extraFee)||0);
+  const perPerson=totalFee>0&&maxPlayers>0?Math.ceil(totalFee/maxPlayers):0;
+
   const save=()=>{
     if(!name.trim())return;
     const d=new Date(date);
     const dateStr=d.toLocaleDateString("vi-VN",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
     onSave({...event,name:name.trim(),location:loc.trim(),note:note.trim(),gameMode,
       date:dateStr,dateISO:date,
+      numCourts:Number(numCourts)||5,
+      maxPlayers:Number(maxPlayers)||0,
       courtFee:Number(courtFee)||0,extraFee:Number(extraFee)||0,
-      feeNote:feeNote.trim(),qrUrl:qrUrl.trim(),
+      feeNote:feeNote.trim(),qrUrl:qrUrl,
       id:event?.id||`ev_${uid()}`,
       createdAt:event?.createdAt||new Date().toISOString(),
     });
@@ -296,6 +344,42 @@ function EventModal({event, onSave, onClose, isNew}){
         <input value={loc} onChange={e=>setLoc(e.target.value)} placeholder="Tên sân..." style={iS}/>
       </Fld>
     </div>
+
+    {/* Số sân + Số người */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Fld label="🏟️ SỐ SÂN" hint="Áp dụng ngay khi tạo event">
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {[2,3,4,5,6,7,8].map(n=>(
+            <button key={n} onClick={()=>setNumCourts(n)}
+              style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:14,
+                border:`2px solid ${numCourts===n?G.accent:G.border}`,
+                background:numCourts===n?G.accent+"22":"transparent",
+                color:numCourts===n?G.accent:G.muted}}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </Fld>
+      <Fld label="👥 SỐ NGƯỜI DỰ KIẾN" hint={maxPlayers>0&&perPerson>0?`≈ ${perPerson.toLocaleString("vi-VN")}đ/người`:"Để trống = không giới hạn"}>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+          {[0,8,12,16,20,24,28,32].map(n=>(
+            <button key={n} onClick={()=>setMaxPlayers(n)}
+              style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,
+                border:`2px solid ${maxPlayers===n?G.purple:G.border}`,
+                background:maxPlayers===n?G.purple+"22":"transparent",
+                color:maxPlayers===n?G.purple:G.muted}}>
+              {n===0?"∞":n}
+            </button>
+          ))}
+        </div>
+        <input type="number" min="1" max="200"
+          value={maxPlayers||""}
+          onChange={e=>setMaxPlayers(Number(e.target.value)||0)}
+          placeholder="Nhập số tuỳ ý (VD: 33)..."
+          style={{...iS,fontSize:13}}/>
+      </Fld>
+    </div>
+
     <Fld label="CHẾ ĐỘ CHƠI">
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7}}>
         {GAME_MODES.map(m=>{const sel=gameMode===m.val;return <button key={m.val} onClick={()=>setGameMode(m.val)} style={{padding:"9px 6px",borderRadius:9,cursor:"pointer",textAlign:"center",border:`2px solid ${sel?G.accent:G.border}`,background:sel?G.accent+"18":"transparent"}}>
@@ -307,22 +391,22 @@ function EventModal({event, onSave, onClose, isNew}){
     <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:2}}>
       <div style={{fontSize:10,fontWeight:800,color:G.gold,marginBottom:10,letterSpacing:1}}>💰 CHI PHÍ BUỔI CHƠI</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Fld label="GIÁ SÂN (VNĐ)">
-          <input type="number" value={courtFee} onChange={e=>setCourtFee(e.target.value)} placeholder="VD: 500000" style={iS}/>
+        <Fld label="GIÁ SÂN (nhập nghìn đ, VD: 500 = 500k)">
+          <FeeInput value={Number(courtFee)||0} onChange={v=>setCourtFee(v)} placeholder="500"/>
         </Fld>
-        <Fld label="CHI PHÍ KHÁC (nước, bóng...)">
-          <input type="number" value={extraFee} onChange={e=>setExtraFee(e.target.value)} placeholder="VD: 200000" style={iS}/>
+        <Fld label="CHI PHÍ KHÁC (nhập nghìn đ, VD: 200 = 200k)">
+          <FeeInput value={Number(extraFee)||0} onChange={v=>setExtraFee(v)} placeholder="200"/>
         </Fld>
       </div>
       <Fld label="GHI CHÚ CHI PHÍ">
         <input value={feeNote} onChange={e=>setFeeNote(e.target.value)} placeholder="VD: 4 sân × 1.5h, nước Aquafina..." style={iS}/>
       </Fld>
-      <Fld label="🔗 LINK / QR THANH TOÁN (Momo, VietQR, số TK...)">
-        <input value={qrUrl} onChange={e=>setQrUrl(e.target.value)} placeholder="https://momopay.vn/... hoặc nhập số tài khoản" style={iS}/>
+      <Fld label="📷 ẢNH QR THANH TOÁN (Momo, VietQR...)">
+        <QRUpload value={qrUrl} onChange={v=>setQrUrl(v)}/>
       </Fld>
       {(Number(courtFee)||Number(extraFee))>0&&<div style={{padding:"10px 14px",borderRadius:9,background:G.gold+"12",border:`1px solid ${G.gold}33`,fontSize:11,color:G.gold}}>
-        💰 Tổng chi phí: <b>{((Number(courtFee)||0)+(Number(extraFee)||0)).toLocaleString("vi-VN")}đ</b>
-        {" · "}Mỗi người (ước tính): <b>?</b> (tính sau khi biết số người check-in)
+        💰 Tổng: <b>{((Number(courtFee)||0)+(Number(extraFee)||0)).toLocaleString("vi-VN")}đ</b>
+        {" · "}Mỗi người: <b>?</b> (tính sau khi biết số người)
       </div>}
     </div>
     <Fld label="GHI CHÚ KHÁC">
@@ -1444,10 +1528,12 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
       {/* QR Setting panel */}
       {showQRSetting&&<div style={{background:G.panel,border:`1px solid ${G.gold}44`,borderRadius:14,padding:16,marginBottom:16,textAlign:"left"}}>
         <div style={{fontSize:12,fontWeight:700,color:G.gold,marginBottom:10}}>💰 Cài đặt QR Thanh toán</div>
-        <div style={{fontSize:10,color:G.muted,marginBottom:6}}>Link Momo / VietQR / số tài khoản</div>
-        <input value={qrInput} onChange={e=>setQrInput(e.target.value)}
-          placeholder="https://momopay.vn/... hoặc STK ngân hàng"
-          style={{...iS,fontSize:13,marginBottom:8}}/>
+        <div style={{fontSize:10,color:G.muted,marginBottom:6}}>Upload ảnh QR hoặc nhập link Momo/VietQR</div>
+        <QRUpload value={qrInput} onChange={v=>setQrInput(v)}/>
+        <div style={{margin:"8px 0 4px",fontSize:9,color:G.dim}}>hoặc nhập link/STK</div>
+        <input value={qrInput&&!qrInput.startsWith("data:")?qrInput:""} onChange={e=>setQrInput(e.target.value)}
+          placeholder="https://momopay.vn/... hoặc STK"
+          style={{...iS,fontSize:12,marginBottom:4}}/>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>{
             if(onSaveAccounts) onSaveAccounts({...accounts,payQrUrl:qrInput});
@@ -1600,6 +1686,12 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
       </div>}
 
       {/* QR Code */}
+      {payQr&&payQr.startsWith("data:")&&<div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,marginBottom:8}}>Quét mã để chuyển khoản</div>
+        <div style={{display:"flex",justifyContent:"center"}}>
+          <img src={payQr} style={{borderRadius:12,border:`3px solid ${G.gold}55`,maxWidth:220}} alt="QR TT"/>
+        </div>
+      </div>}
       {payQr&&payQr.startsWith("http")&&<div style={{marginBottom:16}}>
         <div style={{fontSize:11,color:G.muted,marginBottom:8}}>Quét mã để chuyển khoản</div>
         <div style={{display:"flex",justifyContent:"center"}}>
@@ -1608,7 +1700,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
             alt="QR TT" onError={e=>e.target.style.display='none'}/>
         </div>
       </div>}
-      {payQr&&!payQr.startsWith("http")&&<div style={{padding:"14px 16px",borderRadius:12,background:G.gold+"12",border:`1px solid ${G.gold}44`,marginBottom:16}}>
+      {payQr&&!payQr.startsWith("data:")&&!payQr.startsWith("http")&&<div style={{padding:"14px 16px",borderRadius:12,background:G.gold+"12",border:`1px solid ${G.gold}44`,marginBottom:16}}>
         <div style={{fontSize:11,color:G.muted,marginBottom:4}}>Thông tin thanh toán</div>
         <div style={{fontSize:18,fontWeight:900,color:G.gold}}>{payQr}</div>
       </div>}
@@ -1716,7 +1808,8 @@ function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
   const evPlayers=players.filter(p=>p?.checkedIn); // current event players
   const paidPlayers=evPlayers.filter(p=>p?.paid);
   const unpaidPlayers=evPlayers.filter(p=>!p?.paid);
-  const perPerson=total>0&&evPlayers.length>0?Math.ceil(total/evPlayers.length):0;
+  const denominator=ev?.maxPlayers>0?ev.maxPlayers:(evPlayers.length||1);
+  const perPerson=total>0?Math.ceil(total/denominator):0;
   const collected=paidPlayers.reduce((s,p)=>s+(p.paidAmount||perPerson),0);
   const profit=collected-total;
 
@@ -1976,11 +2069,14 @@ function EventFeeEditor({ev,onSave}){
   </button>;
   return <div style={{background:"#060c18",borderRadius:10,padding:12,border:"1px solid #172840",marginTop:8}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>GIÁ SÂN</div><input type="number" value={cf} onChange={e=>setCf(e.target.value)} style={iS2}/></div>
-      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>CHI PHÍ KHÁC</div><input type="number" value={ef} onChange={e=>setEf(e.target.value)} style={iS2}/></div>
+      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>GIÁ SÂN (nghìn đ)</div><FeeInput value={Number(cf)||0} onChange={v=>setCf(v)} placeholder="500"/></div>
+      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>CHI PHÍ KHÁC (nghìn đ)</div><FeeInput value={Number(ef)||0} onChange={v=>setEf(v)} placeholder="200"/></div>
     </div>
     <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>GHI CHÚ</div><input value={fn} onChange={e=>setFn(e.target.value)} style={iS2}/></div>
-    <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>LINK/QR THANH TOÁN</div><input value={qr} onChange={e=>setQr(e.target.value)} style={iS2}/></div>
+    <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>📷 ẢNH QR THANH TOÁN</div><QRUpload value={qr} onChange={v=>setQr(v)}/></div>
+    {(Number(cf)||Number(ef))>0&&<div style={{marginBottom:8,fontSize:10,color:"#f59e0b"}}>
+      Tổng: {((Number(cf)||0)+(Number(ef)||0)).toLocaleString("vi-VN")}đ
+    </div>}
     <div style={{display:"flex",gap:6}}>
       <button onClick={()=>{onSave({...ev,courtFee:Number(cf)||0,extraFee:Number(ef)||0,feeNote:fn,qrUrl:qr});setEditing(false);}}
         style={{flex:1,padding:"7px 0",borderRadius:8,border:"none",background:"#00c9a7",color:"#000",fontWeight:700,fontSize:12,cursor:"pointer"}}>💾 Lưu</button>
@@ -2338,15 +2434,18 @@ function App(){
   // ── EVENT MANAGEMENT
   const createEvent = (ev) => {
     const newEvents = [...stateRef.current.events, ev];
-    // Giữ nguyên players, chỉ reset checkedIn — data players được GIỮ LẠI cho event sau
     const resetPlayers = serializePlayers(stateRef.current.players.map(x=>({...x,checkedIn:false})));
+    // Áp dụng số sân từ event nếu có
+    const newNumCourts = ev.numCourts || stateRef.current.numCourts;
     setEvents(newEvents);
     setActiveEventId(ev.id);
+    setNumCourts(newNumCourts);
     setQueue([]);
     setPlayers(resetPlayers);
-    showT(`🗓️ Event "${ev.name}" đã tạo! ${resetPlayers.length} người chơi sẵn sàng.`);
+    showT(`🗓️ Event "${ev.name}" · ${newNumCourts} sân${ev.maxPlayers?` · tối đa ${ev.maxPlayers} người`:""}`);
     window._lastSavedAt=Date.now();
-    STORE.save({...stateRef.current, events:newEvents, activeEventId:ev.id, queue:[], players:resetPlayers});
+    STORE.save({...stateRef.current, events:newEvents, activeEventId:ev.id,
+      numCourts:newNumCourts, queue:[], players:resetPlayers});
     setModal(null);
   };
 
@@ -2603,7 +2702,7 @@ function App(){
     {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
     {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts} onSaveAccounts={newAcc=>saveAll({accounts:newAcc})}/>}
-    {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
+    {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts}/>}
     {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
     {subCourt&&<SubModal court={subCourt} players={players} playIds={playIds} onSub={subPlayer} onClose={()=>setSubCourt(null)}/>}
     {editingPlayer&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
