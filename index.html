@@ -1359,48 +1359,107 @@ function HistoryTab({history, events, players, readOnly, onEditEvent, onDeleteEv
 // ══════════════════════════════════════
 // KIOSK TAB
 // ══════════════════════════════════════
-function KioskTab({players, onRegister, queue, courts, history}){
-  const [step, setStep] = useState("welcome");
-  const [form, setForm] = useState({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});
+function KioskTab({players, onRegister, queue, courts, history, activeEvent, accounts, onSaveAccounts}){
+  const [step, setStep] = useState("welcome"); // welcome|form|payment|success
+  const [form, setForm] = useState({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple",paid:false,payMethod:"transfer"});
   const [err, setErr] = useState("");
   const [submitted, setSubmitted] = useState(null);
   const [nameSearch, setNameSearch] = useState("");
   const [autoReset, setAutoReset] = useState(null);
+  const [showQRSetting, setShowQRSetting] = useState(false);
+  const [qrInput, setQrInput] = useState(activeEvent?.qrUrl||accounts?.payQrUrl||"");
   const timerRef = useRef();
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
 
+  // Chi phí
+  const total=(Number(activeEvent?.courtFee)||0)+(Number(activeEvent?.extraFee)||0);
+  const ciCount=players.filter(p=>p?.checkedIn).length||1;
+  const perPerson=total>0?Math.ceil(total/ciCount):0;
+  const payQr = activeEvent?.qrUrl || accounts?.payQrUrl || "";
+
   useEffect(()=>{
     if(step==="success"){
-      let t=20; setAutoReset(t);
+      let t=25; setAutoReset(t);
       timerRef.current=setInterval(()=>{t--;setAutoReset(t);if(t<=0){clearInterval(timerRef.current);resetKiosk();}},1000);
     }
     return()=>clearInterval(timerRef.current);
   },[step]);
 
-  const resetKiosk=()=>{setStep("welcome");setForm({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple"});setErr("");setSubmitted(null);setAutoReset(null);};
+  useEffect(()=>{
+    setQrInput(activeEvent?.qrUrl||accounts?.payQrUrl||"");
+  },[activeEvent, accounts]);
+
+  const resetKiosk=()=>{
+    setStep("welcome");
+    setForm({name:"",gender:"M",skill:"3.0",dtype:"any",cwith:"",ctype:"couple",paid:false,payMethod:"transfer"});
+    setErr("");setSubmitted(null);setAutoReset(null);
+  };
+
   const checkedIn = players.filter(p=>p&&p.checkedIn&&p.name);
   const nsSafe = safe(nameSearch).toLowerCase();
   const suggestions = nsSafe.length>=1?players.filter(p=>p&&p.name&&safe(p.name).toLowerCase().includes(nsSafe)).slice(0,5):[];
-  const selectExisting = (p) => {setForm({name:p.name,gender:p.gender,skill:p.skill,dtype:p.dtype||"any",cwith:"",ctype:"couple"});setNameSearch("");setStep("form");};
+  const selectExisting = (p) => {
+    setForm({name:p.name,gender:p.gender,skill:p.skill,dtype:p.dtype||"any",cwith:"",ctype:"couple",paid:p.paid||false,payMethod:p.payMethod||"transfer"});
+    setNameSearch("");setStep("form");
+  };
+
   const submit = () => {
     const nm = safe(form.name).trim();
-    if(!nm){setErr("Vui lòng nhập tên");return;} setErr("");
+    if(!nm){setErr("Vui lòng nhập tên");return;}
+    setErr("");
     const existing = players.find(p=>p&&safe(p.name).toLowerCase()===nm.toLowerCase());
     let playerData;
     if(existing){
       if(existing.checkedIn){setErr(`${nm} đã check in rồi!`);return;}
       const cid=form.cwith?(existing.coupleId||`couple-${uid()}`):existing.coupleId;
-      playerData={...existing,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,coupleId:form.cwith?cid:existing.coupleId,coupleType:form.cwith?form.ctype:existing.coupleType,coupleWithId:form.cwith||null,isNew:false};
+      playerData={...existing,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,
+        paid:form.paid,payMethod:form.payMethod,paidAmount:form.paid?perPerson:0,
+        coupleId:form.cwith?cid:existing.coupleId,coupleType:form.cwith?form.ctype:existing.coupleType,
+        coupleWithId:form.cwith||null,isNew:false};
     } else {
-      playerData={id:uid(),name:nm,gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};
+      playerData={id:uid(),name:nm,gender:form.gender,skill:form.skill,elo:skillElo(form.skill),
+        dtype:form.dtype,checkedIn:true,paid:form.paid,payMethod:form.payMethod,
+        paidAmount:form.paid?perPerson:0,gamesPlayed:0,wins:0,lastPartners:[],
+        coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,
+        coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};
     }
     onRegister(playerData);
     setSubmitted(playerData);
-    setStep("success");
+    // Nếu chưa thanh toán và có QR → chuyển sang màn payment
+    if(!form.paid && payQr) {
+      setStep("payment");
+    } else {
+      setStep("success");
+    }
   };
 
+  // ── WELCOME ──
   if(step==="welcome") return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
     <div style={{width:"100%",maxWidth:500,textAlign:"center"}}>
+      {/* QR Setting button */}
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+        <button onClick={()=>setShowQRSetting(s=>!s)} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontSize:11,cursor:"pointer"}}>⚙️ Cài đặt QR TT</button>
+      </div>
+
+      {/* QR Setting panel */}
+      {showQRSetting&&<div style={{background:G.panel,border:`1px solid ${G.gold}44`,borderRadius:14,padding:16,marginBottom:16,textAlign:"left"}}>
+        <div style={{fontSize:12,fontWeight:700,color:G.gold,marginBottom:10}}>💰 Cài đặt QR Thanh toán</div>
+        <div style={{fontSize:10,color:G.muted,marginBottom:6}}>Link Momo / VietQR / số tài khoản</div>
+        <input value={qrInput} onChange={e=>setQrInput(e.target.value)}
+          placeholder="https://momopay.vn/... hoặc STK ngân hàng"
+          style={{...iS,fontSize:13,marginBottom:8}}/>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{
+            if(onSaveAccounts) onSaveAccounts({...accounts,payQrUrl:qrInput});
+            setShowQRSetting(false);
+          }} style={{...bP,flex:1,padding:"9px 0",fontSize:13}}>💾 Lưu</button>
+          <button onClick={()=>setShowQRSetting(false)} style={{...bS,padding:"9px 12px",fontSize:13}}>Huỷ</button>
+        </div>
+        {perPerson>0&&<div style={{marginTop:8,fontSize:11,color:G.gold,textAlign:"center"}}>
+          Chi phí/người hôm nay: <b>{perPerson.toLocaleString("vi-VN")}đ</b>
+        </div>}
+      </div>}
+
       <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:32}}>
         {[{v:courts.filter(c=>c.match).length,l:"Sân live",c:G.red},{v:players.filter(p=>p?.checkedIn).length,l:"Check-in",c:G.accent},{v:queue.length,l:"Queue",c:G.purple}].map(s=>(
           <div key={s.l} style={{padding:"10px 20px",borderRadius:12,background:s.c+"18",border:`1px solid ${s.c}44`,textAlign:"center"}}>
@@ -1410,7 +1469,10 @@ function KioskTab({players, onRegister, queue, courts, history}){
       </div>
       <div style={{fontSize:56,marginBottom:12}}>🏓</div>
       <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:8}}>Chào mừng!</div>
-      <div style={{fontSize:14,color:G.muted,marginBottom:32}}>Tự đăng ký để vào hàng chờ</div>
+      <div style={{fontSize:14,color:G.muted,marginBottom:perPerson>0?8:32}}>Tự đăng ký để vào hàng chờ</div>
+      {perPerson>0&&<div style={{padding:"8px 16px",borderRadius:10,background:G.gold+"12",border:`1px solid ${G.gold}33`,marginBottom:24,fontSize:13,color:G.gold,fontWeight:700}}>
+        💰 Chi phí hôm nay: {perPerson.toLocaleString("vi-VN")}đ / người
+      </div>}
       <div style={{marginBottom:20}}>
         <input value={nameSearch} onChange={e=>setNameSearch(e.target.value)} placeholder="Tìm tên nhanh..." style={{...iS,fontSize:16,padding:"12px 16px",borderRadius:12,textAlign:"center"}} autoComplete="off"/>
         {suggestions.length>0&&<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
@@ -1437,11 +1499,12 @@ function KioskTab({players, onRegister, queue, courts, history}){
     </div>
   </div>;
 
+  // ── FORM ──
   if(step==="form") return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 16px"}}>
     <div style={{width:"100%",maxWidth:480}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
         <button onClick={resetKiosk} style={{...bS,padding:"6px 12px"}}>← Quay lại</button>
-        <div><div style={{fontSize:18,fontWeight:900,color:"#fff"}}>📝 Thông tin</div></div>
+        <div style={{fontSize:18,fontWeight:900,color:"#fff"}}>📝 Thông tin</div>
       </div>
       <div style={{marginBottom:16}}>
         <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>👤 TÊN *</div>
@@ -1480,6 +1543,37 @@ function KioskTab({players, onRegister, queue, courts, history}){
           );})}
         </div>
       </div>
+
+      {/* Thanh toán */}
+      <div style={{marginBottom:16,borderTop:`1px solid ${G.border}`,paddingTop:16}}>
+        <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>💰 THANH TOÁN{perPerson>0?` (${perPerson.toLocaleString("vi-VN")}đ)`:""}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          {[{v:false,l:"⏳ Chưa TT",c:G.gold,sub:"Thanh toán sau"},{v:true,l:"✅ Đã TT",c:"#34d399",sub:"Đã thanh toán"}].map(o=>(
+            <button key={String(o.v)} onClick={()=>sf("paid",o.v)}
+              style={{padding:"14px 8px",borderRadius:12,cursor:"pointer",fontWeight:700,fontSize:14,textAlign:"center",
+                border:`3px solid ${form.paid===o.v?o.c:G.border}`,
+                background:form.paid===o.v?o.c+"22":"transparent",
+                color:form.paid===o.v?o.c:G.muted,
+                display:"flex",flexDirection:"column",gap:3,alignItems:"center"}}>
+              <span style={{fontSize:22}}>{form.paid===o.v?"●":"○"}</span>
+              {o.l}
+              <span style={{fontSize:9,fontWeight:400}}>{o.sub}</span>
+            </button>
+          ))}
+        </div>
+        {form.paid&&<div style={{display:"flex",gap:6}}>
+          {[{v:"transfer",l:"🏦 Chuyển khoản"},{v:"cash",l:"💵 Tiền mặt"}].map(m=>(
+            <button key={m.v} onClick={()=>sf("payMethod",m.v)}
+              style={{flex:1,padding:"9px 6px",borderRadius:9,cursor:"pointer",fontSize:11,fontWeight:700,
+                border:`2px solid ${form.payMethod===m.v?G.accent:G.border}`,
+                background:form.payMethod===m.v?G.accent+"18":"transparent",
+                color:form.payMethod===m.v?G.accent:G.muted}}>
+              {m.l}
+            </button>
+          ))}
+        </div>}
+      </div>
+
       {checkedIn.length>0&&<div style={{marginBottom:16}}>
         <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>💑 KẾT ĐÔI (tuỳ chọn)</div>
         <select value={form.cwith} onChange={e=>sf("cwith",e.target.value)} style={{...iS,fontSize:13,padding:"10px 14px",borderRadius:10}}>
@@ -1490,18 +1584,77 @@ function KioskTab({players, onRegister, queue, courts, history}){
         </select>
       </div>}
       {err&&<div style={{padding:"12px 16px",borderRadius:10,background:G.red+"15",border:`1px solid ${G.red}44`,color:G.red,fontSize:13,fontWeight:600,marginBottom:14}}>⚠️ {err}</div>}
-      <button onClick={submit} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>✅ Xác nhận & Vào hàng chờ</button>
+      <button onClick={submit} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>
+        {form.paid?"✅ Xác nhận & Vào hàng chờ":"➡️ Tiếp theo"}
+      </button>
     </div>
   </div>;
 
+  // ── PAYMENT ──
+  if(step==="payment"&&submitted) return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{width:"100%",maxWidth:440,textAlign:"center"}}>
+      <div style={{fontSize:22,fontWeight:900,color:G.gold,marginBottom:4}}>💰 Thanh toán</div>
+      <div style={{fontSize:16,color:G.text,marginBottom:4}}>{safe(submitted.name)}</div>
+      {perPerson>0&&<div style={{fontSize:32,fontWeight:900,color:G.gold,marginBottom:16}}>
+        {perPerson.toLocaleString("vi-VN")}đ
+      </div>}
+
+      {/* QR Code */}
+      {payQr&&payQr.startsWith("http")&&<div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,marginBottom:8}}>Quét mã để chuyển khoản</div>
+        <div style={{display:"flex",justifyContent:"center"}}>
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(payQr)}`}
+            style={{borderRadius:12,border:`3px solid ${G.gold}55`,maxWidth:200}}
+            alt="QR TT" onError={e=>e.target.style.display='none'}/>
+        </div>
+      </div>}
+      {payQr&&!payQr.startsWith("http")&&<div style={{padding:"14px 16px",borderRadius:12,background:G.gold+"12",border:`1px solid ${G.gold}44`,marginBottom:16}}>
+        <div style={{fontSize:11,color:G.muted,marginBottom:4}}>Thông tin thanh toán</div>
+        <div style={{fontSize:18,fontWeight:900,color:G.gold}}>{payQr}</div>
+      </div>}
+      {!payQr&&<div style={{padding:"14px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:16,fontSize:13,color:G.muted}}>
+        Chưa cài đặt QR — hỏi Host để thanh toán
+      </div>}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+        <button onClick={()=>{
+          // Mark as paid
+          const updated={...submitted,paid:true,payMethod:"transfer",paidAmount:perPerson};
+          onRegister(updated);
+          setSubmitted(updated);
+          setStep("success");
+        }} style={{...bP,padding:"14px 0",fontSize:13,background:`linear-gradient(135deg,${G.accent},#34d399)`}}>
+          ✅ Đã chuyển khoản
+        </button>
+        <button onClick={()=>{
+          const updated={...submitted,paid:true,payMethod:"cash",paidAmount:perPerson};
+          onRegister(updated);
+          setSubmitted(updated);
+          setStep("success");
+        }} style={{...bP,padding:"14px 0",fontSize:13,background:`linear-gradient(135deg,${G.gold},${G.red})`}}>
+          💵 Đã TT tiền mặt
+        </button>
+      </div>
+      <button onClick={()=>setStep("success")} style={{...bS,width:"100%",padding:"12px",fontSize:13,color:G.muted}}>
+        ⏭️ Thanh toán sau
+      </button>
+    </div>
+  </div>;
+
+  // ── SUCCESS ──
   if(step==="success"&&submitted) return <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
     <div style={{width:"100%",maxWidth:440,textAlign:"center"}}>
       <div style={{fontSize:64,marginBottom:8}}>🎉</div>
       <div style={{fontSize:22,fontWeight:900,color:G.accent,marginBottom:4}}>Check in thành công!</div>
       <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:16}}>{safe(submitted.name)}</div>
-      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:16,flexWrap:"wrap"}}>
         <GBadge gender={submitted.gender}/><SBadge skill={submitted.skill}/><DBadge dtype={submitted.dtype}/>
         {submitted.isNew&&<Chip label="🆕 Mới" color={G.gold}/>}
+        <span style={{padding:"2px 10px",borderRadius:8,fontSize:10,fontWeight:700,
+          background:submitted.paid?"#34d39922":G.gold+"22",
+          color:submitted.paid?"#34d399":G.gold}}>
+          {submitted.paid?"✅ Đã TT":"⏳ Chưa TT"}
+        </span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
         <div style={{padding:"16px",borderRadius:12,background:G.accent+"15",border:`1px solid ${G.accent}44`,textAlign:"center"}}>
@@ -1526,6 +1679,7 @@ function KioskTab({players, onRegister, queue, courts, history}){
   </div>;
   return null;
 }
+
 
 // ══════════════════════════════════════
 // MAIN TABS
@@ -2531,7 +2685,7 @@ function App(){
       {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)}/>}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
-      {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
+      {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history} activeEvent={activeEvent} accounts={accounts} onSaveAccounts={newAcc=>{setAccounts(newAcc);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,accounts:newAcc});}}/>}
       {tab==="cost"       &&<CostTab events={events} players={players} activeEventId={activeEventId} onUpdatePlayer={p=>{const upd=stateRef.current.players.map(x=>x.id===p.id?p:x);setPlayers(upd);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,players:serializePlayers(upd)});}} onUpdateEvent={ev=>{const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);setEvents(newEvs);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,events:newEvs});}}/>}
     </main>
   </div>;
