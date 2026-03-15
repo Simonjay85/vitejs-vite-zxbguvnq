@@ -542,28 +542,77 @@ function ScoreModal({match,onConfirm,onClose}){
 // EDIT PLAYER MODAL
 // ══════════════════════════════════════
 function EditPlayerModal({player,onSave,onClose,toast}){
-  const [f,setF]=useState({name:player.name||"",gender:player.gender||"M",skill:player.skill||"3.0",phone:player.phone||"",note:player.note||"",dtype:player.dtype||"any"});
+  const [f,setF]=useState({name:player.name||"",gender:player.gender||"M",skill:player.skill||"3.0",
+    phone:player.phone||"",note:player.note||"",dtype:player.dtype||"any",
+    paid:player.paid||false,payMethod:player.payMethod||"transfer",
+    paidAmount:player.paidAmount||0,totalSpent:player.totalSpent||0,
+    monthSpent:player.monthSpent||0,eventCount:player.eventCount||0
+  });
   const [showReset,setShowReset]=useState(false);
   const sf=(k,v)=>setF(prev=>({...prev,[k]:v}));
   const save=()=>{if(!safe(f.name).trim()){toast("Nhập tên","warn");return;}onSave({...player,...f,name:f.name.trim()});};
-  return <MBox title={`✏️ Sửa: ${player.name}`} onClose={onClose} w={460}>
+  return <MBox title={`✏️ Sửa: ${player.name}`} onClose={onClose} w={480}>
     <Fld label="TÊN"><input value={f.name} onChange={e=>sf("name",e.target.value)} style={iS} autoFocus/></Fld>
     <Fld label="GIỚI TÍNH"><div style={{display:"flex",gap:8}}>{[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=><button key={g.v} onClick={()=>sf("gender",g.v)} style={{flex:1,padding:"10px 0",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,border:`2px solid ${f.gender===g.v?g.c:G.border}`,background:f.gender===g.v?g.c+"25":"transparent",color:f.gender===g.v?g.c:G.muted}}>{g.l}</button>)}</div></Fld>
     <Fld label="TRÌNH ĐỘ"><div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>{SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=f.skill===s;return <button key={s} onClick={()=>sf("skill",s)} style={{padding:"8px 2px",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}>{s}</button>;})}</div></Fld>
     <Fld label="KIỂU ĐÔI"><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>{DTYPE_OPT.map(d=>{const sel=f.dtype===d.val;return <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"6px 2px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>;})}</div></Fld>
     <Fld label="SỐ ĐIỆN THOẠI"><input value={f.phone} onChange={e=>sf("phone",e.target.value)} placeholder="0901234567..." style={iS}/></Fld>
+
+    {/* Payment section */}
+    <div style={{borderTop:`1px solid ${G.border}`,paddingTop:12,marginTop:4,marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:800,color:G.gold,marginBottom:10,letterSpacing:1}}>💰 CHI PHÍ & THANH TOÁN</div>
+      <Fld label="TRẠNG THÁI">
+        <div style={{display:"flex",gap:7}}>
+          {[{v:false,l:"⏳ Chưa TT",c:G.gold},{v:true,l:"✅ Đã TT",c:"#34d399"}].map(o=>
+            <button key={String(o.v)} onClick={()=>sf("paid",o.v)}
+              style={{flex:1,padding:"9px 0",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:13,
+                border:`2px solid ${f.paid===o.v?o.c:G.border}`,
+                background:f.paid===o.v?o.c+"22":"transparent",
+                color:f.paid===o.v?o.c:G.muted}}>{o.l}</button>)}
+        </div>
+      </Fld>
+      <Fld label="HÌNH THỨC">
+        <div style={{display:"flex",gap:6}}>
+          {[{v:"transfer",l:"🏦 Chuyển khoản"},{v:"cash",l:"💵 Tiền mặt"},{v:"free",l:"🎁 Miễn phí"}].map(m=>
+            <button key={m.v} onClick={()=>sf("payMethod",m.v)}
+              style={{flex:1,padding:"7px 4px",borderRadius:8,fontSize:10,fontWeight:700,cursor:"pointer",
+                border:`2px solid ${f.payMethod===m.v?G.accent:G.border}`,
+                background:f.payMethod===m.v?G.accent+"18":"transparent",
+                color:f.payMethod===m.v?G.accent:G.muted}}>{m.l}</button>)}
+        </div>
+      </Fld>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <Fld label="SỐ TIỀN ĐÃ TT (buổi này)">
+          <input type="number" value={f.paidAmount||""} onChange={e=>sf("paidAmount",Number(e.target.value))} placeholder="0" style={iS}/>
+        </Fld>
+        <Fld label="TỔNG ĐÃ CHI (tất cả event)">
+          <input type="number" value={f.totalSpent||""} onChange={e=>sf("totalSpent",Number(e.target.value))} placeholder="0" style={iS}/>
+        </Fld>
+      </div>
+    </div>
+
     <Fld label="GHI CHÚ"><input value={f.note} onChange={e=>sf("note",e.target.value)} placeholder="VD: hay đến muộn, ưu tiên sân 2..." style={iS}/></Fld>
+
+    {/* Stats */}
     <div style={{padding:"10px 12px",borderRadius:9,background:G.card,border:`1px solid ${G.border}`,marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div><div style={{fontSize:11,fontWeight:700,color:G.text}}>Thống kê hiện tại</div>
-          <div style={{fontSize:10,color:G.muted,marginTop:1}}>ELO: <b style={{color:SKILL_COLOR[player.skill]}}>{player.elo||"?"}</b> · Trận: <b>{player.gamesPlayed||0}</b> · Kootoro: <b style={{color:G.gold}}>{player.kootoro||0}</b></div></div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:G.text}}>Thống kê</div>
+          <div style={{fontSize:10,color:G.muted,marginTop:1,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <span>ELO: <b style={{color:SKILL_COLOR[player.skill]}}>{player.elo||"?"}</b></span>
+            <span>Trận: <b>{player.gamesPlayed||0}</b></span>
+            <span>Kootoro: <b style={{color:G.gold}}>{player.kootoro||0}</b></span>
+            <span>Events: <b>{f.eventCount||0}</b></span>
+          </div>
+        </div>
         <button onClick={()=>setShowReset(p=>!p)} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>⚠️ Reset</button>
       </div>
       {showReset&&<div style={{marginTop:10}}>
         <div style={{fontSize:10,color:G.red,marginBottom:8}}>⚠️ Không thể hoàn tác!</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),elo:SKILL_ELO[f.skill]||1200,baseElo:SKILL_ELO[f.skill]||1200,gamesPlayed:0,wins:0,kootoro:0,lastPartners:[]});toast(`Reset toàn bộ: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset ELO+Kootoro+Trận</button>
-          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),kootoro:0});toast(`Reset Kootoro: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset Kootoro only</button>
+          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),elo:SKILL_ELO[f.skill]||1200,baseElo:SKILL_ELO[f.skill]||1200,gamesPlayed:0,wins:0,kootoro:0,lastPartners:[],totalSpent:0,monthSpent:0,eventCount:0,paidAmount:0});toast(`Reset toàn bộ: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset tất cả</button>
+          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),kootoro:0});toast(`Reset Kootoro: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset Kootoro</button>
+          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),totalSpent:0,monthSpent:0,paidAmount:0});toast(`Reset chi phí: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset chi phí</button>
         </div>
       </div>}
     </div>
@@ -1490,101 +1539,290 @@ function PayQRBox({qrUrl,courtFee,extraFee,players}){
 }
 
 // ── CostTab: quản lý chi phí tất cả event
-function CostTab({events,players,activeEventId}){
-  const [selEv,setSelEv]=useState(activeEventId||events[events.length-1]?.id||"");
+function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
+  const [view,setView]=useState("event"); // event | player
+  const [selEv,setSelEv]=useState(activeEventId||[...events].reverse()[0]?.id||"");
+
+  // ── EVENT VIEW
   const ev=events.find(e=>e.id===selEv);
   const total=(Number(ev?.courtFee)||0)+(Number(ev?.extraFee)||0);
-  const ci=players.filter(p=>p?.checkedIn);
-  const paid=players.filter(p=>p?.paid&&p?.checkedIn);
-  const unpaid=ci.filter(p=>!p?.paid);
-  const perPerson=total>0&&ci.length>0?Math.ceil(total/ci.length):0;
-  const collected=paid.length*perPerson;
-  const remaining=total-collected;
+  const evPlayers=players.filter(p=>p?.checkedIn); // current event players
+  const paidPlayers=evPlayers.filter(p=>p?.paid);
+  const unpaidPlayers=evPlayers.filter(p=>!p?.paid);
+  const perPerson=total>0&&evPlayers.length>0?Math.ceil(total/evPlayers.length):0;
+  const collected=paidPlayers.reduce((s,p)=>s+(p.paidAmount||perPerson),0);
+  const profit=collected-total;
 
+  // ── PLAYER STATS (all-time)
+  const now=new Date();
+  const thisMonth=now.getMonth();
+  const thisYear=now.getFullYear();
+
+  const playerStats=players.filter(p=>p?.name).map(p=>{
+    // Sum up cost across all events player participated in
+    // We track totalSpent on the player object, updated each time they pay
+    const spent=p.totalSpent||0;
+    const monthSpent=p.monthSpent||0;
+    const evCount=p.eventCount||0;
+    return {...p,spent,monthSpent,evCount};
+  }).sort((a,b)=>b.spent-a.spent);
+
+  const fmtVND=v=>v?v.toLocaleString("vi-VN")+"đ":"0đ";
+
+  // Toggle paid for a player in current event
+  const togglePaid=(p)=>{
+    const nowPaid=!p.paid;
+    const amt=nowPaid?perPerson:0;
+    const newSpent=(p.totalSpent||0)+(nowPaid?perPerson:-(p.paidAmount||perPerson));
+    onUpdatePlayer({...p, paid:nowPaid, paidAmount:nowPaid?perPerson:0,
+      totalSpent:Math.max(0,newSpent),
+      payMethod:nowPaid?(p.payMethod||"transfer"):p.payMethod
+    });
+  };
+
+  const setPayMethod=(p,method)=>{
+    onUpdatePlayer({...p,payMethod:method});
+  };
+
+  const setCustomAmt=(p,amt)=>{
+    const diff=amt-(p.paidAmount||0);
+    onUpdatePlayer({...p,paidAmount:amt,totalSpent:Math.max(0,(p.totalSpent||0)+diff)});
+  };
+
+  // ── TABS
   return <div>
-    {/* Event selector */}
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:7}}>CHỌN EVENT</div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:6,marginBottom:16,borderBottom:`1px solid ${G.border}`,paddingBottom:10}}>
+      {[{id:"event",l:"📅 Theo Event"},{id:"player",l:"👥 Theo Người chơi"}].map(t=>
+        <button key={t.id} onClick={()=>setView(t.id)}
+          style={{padding:"7px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+            border:`1px solid ${view===t.id?G.gold:G.border}`,
+            background:view===t.id?G.gold+"18":"transparent",
+            color:view===t.id?G.gold:G.muted}}>
+          {t.l}
+        </button>
+      )}
+    </div>
+
+    {/* ══ EVENT VIEW ══ */}
+    {view==="event"&&<>
+      {/* Event selector */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
         {[...events].reverse().map(e=><button key={e.id} onClick={()=>setSelEv(e.id)}
-          style={{padding:"6px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",
+          style={{padding:"5px 12px",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",
             border:`1px solid ${selEv===e.id?G.accent:G.border}`,
             background:selEv===e.id?G.accent+"18":"transparent",
             color:selEv===e.id?G.accent:G.muted}}>
           {e.name}
         </button>)}
       </div>
-    </div>
 
-    {ev&&<>
-      {/* Event info */}
-      <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:16,marginBottom:12}}>
-        <div style={{fontSize:15,fontWeight:800,color:G.text,marginBottom:4}}>{ev.name}</div>
-        <div style={{fontSize:11,color:G.muted,marginBottom:10}}>{ev.date}{ev.location&&` · ${ev.location}`}</div>
-
-        {/* Cost breakdown */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-          {[
-            {l:"Giá sân",v:Number(ev.courtFee)||0,c:G.blue},
-            {l:"Chi phí khác",v:Number(ev.extraFee)||0,c:G.purple},
-            {l:"Tổng chi phí",v:total,c:G.gold},
-            {l:"Mỗi người",v:perPerson,c:G.accent},
-          ].map(s=><div key={s.l} style={{padding:"10px 12px",borderRadius:10,background:G.card,border:`1px solid ${G.border}`}}>
-            <div style={{fontSize:9,color:G.muted,marginBottom:3,fontWeight:600}}>{s.l}</div>
-            <div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v.toLocaleString("vi-VN")}đ</div>
-          </div>)}
-        </div>
-        {ev.feeNote&&<div style={{fontSize:11,color:G.muted,marginBottom:8}}>📝 {ev.feeNote}</div>}
-      </div>
-
-      {/* Payment status */}
-      <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:16,marginBottom:12}}>
-        <div style={{fontSize:10,fontWeight:800,color:G.text,marginBottom:10,letterSpacing:1}}>💳 TRẠNG THÁI THANH TOÁN</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
-          {[
-            {l:"Check-in",v:ci.length,c:G.accent,i:"✅"},
-            {l:"Đã TT",v:paid.length,c:"#34d399",i:"💚"},
-            {l:"Chưa TT",v:unpaid.length,c:G.red,i:"⏳"},
-          ].map(s=><div key={s.l} style={{padding:"10px 8px",borderRadius:10,background:G.card,border:`1px solid ${G.border}`,textAlign:"center"}}>
-            <div style={{fontSize:16}}>{s.i}</div>
-            <div style={{fontSize:20,fontWeight:900,color:s.c}}>{s.v}</div>
-            <div style={{fontSize:9,color:G.muted,fontWeight:600}}>{s.l}</div>
-          </div>)}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div style={{padding:"10px 12px",borderRadius:10,background:"#34d39922",border:"1px solid #34d39944"}}>
-            <div style={{fontSize:9,color:"#34d399",marginBottom:2,fontWeight:600}}>ĐÃ THU</div>
-            <div style={{fontSize:16,fontWeight:900,color:"#34d399"}}>{collected.toLocaleString("vi-VN")}đ</div>
-          </div>
-          <div style={{padding:"10px 12px",borderRadius:10,background:remaining>0?G.red+"18":G.accent+"18",border:`1px solid ${remaining>0?G.red:G.accent}44`}}>
-            <div style={{fontSize:9,color:remaining>0?G.red:G.accent,marginBottom:2,fontWeight:600}}>{remaining>0?"CÒN THIẾU":"ĐỦ / DƯ"}</div>
-            <div style={{fontSize:16,fontWeight:900,color:remaining>0?G.red:G.accent}}>{Math.abs(remaining).toLocaleString("vi-VN")}đ</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Player payment list */}
-      {ci.length>0&&<div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:16}}>
-        <div style={{fontSize:10,fontWeight:800,color:G.text,marginBottom:10,letterSpacing:1}}>👥 DANH SÁCH THANH TOÁN</div>
-        <div style={{display:"flex",flexDirection:"column",gap:5}}>
-          {ci.map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:9,
-            background:G.card,border:`1px solid ${p.paid?G.accent+"33":G.gold+"33"}`}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:G.text}}>{safe(p.name)}</div>
-              <div style={{fontSize:10,color:G.muted}}>{p.skill} · {p.gender==="M"?"Nam":"Nữ"}</div>
+      {ev&&<>
+        {/* Event header + cost */}
+        <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:16,marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:G.text}}>{ev.name}</div>
+              <div style={{fontSize:11,color:G.muted}}>{ev.date}{ev.location&&` · 📍${ev.location}`}</div>
             </div>
-            <div style={{fontSize:13,fontWeight:700,color:G.muted}}>{perPerson.toLocaleString("vi-VN")}đ</div>
-            <div style={{padding:"3px 10px",borderRadius:7,fontSize:10,fontWeight:700,
-              background:p.paid?G.accent+"20":G.gold+"20",color:p.paid?G.accent:G.gold}}>
-              {p.paid?"✅ Đã TT":"⏳ Chưa"}
-            </div>
+            {ev.ended&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:G.muted+"22",color:G.muted,fontWeight:600}}>Đã KT</span>}
+          </div>
+
+          {/* Quick cost stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:10}}>
+            {[
+              {l:"👥 Người check-in",v:evPlayers.length+" người",c:G.blue},
+              {l:"💰 Chi phí/người",v:fmtVND(perPerson),c:G.gold},
+              {l:"🏟️ Giá sân",v:fmtVND(Number(ev.courtFee)||0),c:G.purple},
+              {l:"🧾 Chi phí khác",v:fmtVND(Number(ev.extraFee)||0),c:G.muted},
+            ].map(s=><div key={s.l} style={{padding:"9px 11px",borderRadius:9,background:G.card,border:`1px solid ${G.border}`}}>
+              <div style={{fontSize:9,color:G.muted,marginBottom:2}}>{s.l}</div>
+              <div style={{fontSize:13,fontWeight:900,color:s.c}}>{s.v}</div>
+            </div>)}
+          </div>
+
+          {/* Inline edit fees */}
+          <EventFeeEditor ev={ev} onSave={onUpdateEvent}/>
+        </div>
+
+        {/* Revenue summary */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+          {[
+            {l:"Đã thu",v:fmtVND(collected),c:"#34d399",bg:"#34d39918"},
+            {l:"Tổng CP",v:fmtVND(total),c:G.gold,bg:G.gold+"12"},
+            {l:profit>=0?"Lời":"Lỗ",v:fmtVND(Math.abs(profit)),c:profit>=0?"#34d399":G.red,bg:profit>=0?"#34d39918":G.red+"18"},
+          ].map(s=><div key={s.l} style={{padding:"11px 8px",borderRadius:11,background:s.bg,border:`1px solid ${s.c}44`,textAlign:"center"}}>
+            <div style={{fontSize:9,color:s.c,fontWeight:700,marginBottom:3}}>{s.l}</div>
+            <div style={{fontSize:14,fontWeight:900,color:s.c}}>{s.v}</div>
           </div>)}
         </div>
-      </div>}
+
+        {/* Player payment list */}
+        <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:800,color:G.text}}>
+              💳 Thanh toán ({paidPlayers.length}/{evPlayers.length})
+            </div>
+            <div style={{display:"flex",gap:5}}>
+              <span style={{fontSize:10,color:"#34d399",fontWeight:600}}>✅{paidPlayers.length}</span>
+              <span style={{fontSize:10,color:G.red,fontWeight:600}}>⏳{unpaidPlayers.length}</span>
+            </div>
+          </div>
+          {evPlayers.length===0&&<div style={{color:G.dim,fontSize:11,textAlign:"center",padding:16}}>Chưa có người check-in</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {evPlayers.map(p=><PlayerPayRow key={p.id} p={p} perPerson={perPerson}
+              onToggle={()=>togglePaid(p)}
+              onMethod={m=>setPayMethod(p,m)}
+              onAmount={a=>setCustomAmt(p,a)}/>)}
+          </div>
+        </div>
+      </>}
+      {!ev&&<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:40}}>Không có event nào</div>}
     </>}
-    {!ev&&<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:40}}>Chọn event để xem chi phí</div>}
+
+    {/* ══ PLAYER VIEW ══ */}
+    {view==="player"&&<>
+      <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:14,marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:800,color:G.text,marginBottom:12}}>🏆 Top chi tiêu</div>
+        {playerStats.length===0&&<div style={{color:G.dim,fontSize:11}}>Chưa có dữ liệu</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {playerStats.filter(p=>p.spent>0||p.gamesPlayed>0).slice(0,20).map((p,i)=>(
+            <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+              borderRadius:10,background:i<3?G.gold+"08":G.card,
+              border:`1px solid ${i===0?G.gold+"44":G.border}`}}>
+              <div style={{fontSize:16,width:24,textAlign:"center",flexShrink:0}}>
+                {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+                <div style={{fontSize:10,color:G.muted,marginTop:1,display:"flex",gap:8}}>
+                  <span>🎾 {p.gamesPlayed||0} trận</span>
+                  <span>📅 {p.evCount||0} event</span>
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:13,fontWeight:900,color:G.gold}}>{fmtVND(p.spent)}</div>
+                {p.monthSpent>0&&<div style={{fontSize:9,color:G.muted}}>tháng này: {fmtVND(p.monthSpent)}</div>}
+              </div>
+            </div>
+          ))}
+          {playerStats.filter(p=>p.spent===0&&p.gamesPlayed===0).length>0&&
+            <div style={{fontSize:10,color:G.dim,textAlign:"center",padding:"8px 0"}}>
+              + {playerStats.filter(p=>p.spent===0&&p.gamesPlayed===0).length} người chưa có dữ liệu
+            </div>}
+        </div>
+      </div>
+
+      {/* All events summary */}
+      <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:13,padding:14}}>
+        <div style={{fontSize:11,fontWeight:800,color:G.text,marginBottom:12}}>📅 Tổng kết theo event</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {[...events].reverse().map(e=>{
+            const ePlayers=players.filter(p=>p?.checkedIn);
+            const eTotal=(Number(e.courtFee)||0)+(Number(e.extraFee)||0);
+            const ePaid=ePlayers.filter(p=>p?.paid);
+            const eCollected=ePaid.reduce((s,p)=>s+(p.paidAmount||0),0);
+            const eProfit=eCollected-eTotal;
+            return <div key={e.id} style={{padding:"11px 13px",borderRadius:11,background:G.card,border:`1px solid ${G.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.text}}>{e.name}</div>
+                  <div style={{fontSize:10,color:G.muted}}>{e.date}{e.location&&` · ${e.location}`}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:eProfit>=0?"#34d399":G.red}}>
+                    {eProfit>=0?"💚":"🔴"} {eProfit>=0?"Lời":"Lỗ"} {fmtVND(Math.abs(eProfit))}
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+                {[
+                  {l:"Người chơi",v:ePlayers.length},
+                  {l:"Chi phí sân",v:fmtVND(Number(e.courtFee)||0)},
+                  {l:"Chi phí khác",v:fmtVND(Number(e.extraFee)||0)},
+                  {l:"Đã thu",v:fmtVND(eCollected)},
+                ].map(s=><div key={s.l} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:G.muted}}>{s.l}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:G.text}}>{s.v}</div>
+                </div>)}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+    </>}
   </div>;
 }
+
+// ── Row thanh toán cho từng người trong CostTab
+function PlayerPayRow({p,perPerson,onToggle,onMethod,onAmount}){
+  const [editing,setEditing]=useState(false);
+  const [customAmt,setCustomAmt]=useState(p.paidAmount||perPerson);
+  return <div style={{borderRadius:10,background:G.card,border:`1px solid ${p.paid?"#34d39944":G.gold+"33"}`,overflow:"hidden"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px"}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+        <div style={{fontSize:10,color:G.muted}}>{p.skill} · {p.gender==="M"?"Nam":"Nữ"}</div>
+      </div>
+      <div style={{fontSize:12,fontWeight:700,color:G.muted,flexShrink:0}}>{(p.paidAmount||perPerson).toLocaleString("vi-VN")}đ</div>
+      <button onClick={onToggle} style={{padding:"5px 11px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:11,
+        background:p.paid?"#34d39922":G.gold+"22",color:p.paid?"#34d399":G.gold,flexShrink:0}}>
+        {p.paid?"✅ Đã TT":"⏳ Chưa"}
+      </button>
+      <button onClick={()=>setEditing(e=>!e)} style={{padding:"5px 7px",borderRadius:7,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontSize:11,cursor:"pointer",flexShrink:0}}>✏️</button>
+    </div>
+    {editing&&<div style={{padding:"8px 11px 11px",borderTop:`1px solid ${G.border}`,background:G.bg}}>
+      {/* Payment method */}
+      <div style={{display:"flex",gap:6,marginBottom:8}}>
+        {[{v:"transfer",l:"🏦 Chuyển khoản"},{v:"cash",l:"💵 Tiền mặt"},{v:"free",l:"🎁 Miễn phí"}].map(m=>
+          <button key={m.v} onClick={()=>onMethod(m.v)}
+            style={{flex:1,padding:"6px 4px",borderRadius:7,fontSize:10,fontWeight:700,cursor:"pointer",
+              border:`2px solid ${p.payMethod===m.v?G.accent:G.border}`,
+              background:p.payMethod===m.v?G.accent+"18":"transparent",
+              color:p.payMethod===m.v?G.accent:G.muted}}>
+            {m.l}
+          </button>)}
+      </div>
+      {/* Custom amount */}
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <input type="number" value={customAmt} onChange={e=>setCustomAmt(Number(e.target.value))}
+          style={{...{background:"#0f1e33",border:"1px solid #172840",borderRadius:8,padding:"7px 10px",color:"#dde6f5",fontSize:12},flex:1}}/>
+        <button onClick={()=>{onAmount(customAmt);setEditing(false);}}
+          style={{padding:"7px 14px",borderRadius:8,border:"none",background:"#00c9a7",color:"#000",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+          Lưu
+        </button>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── Inline fee editor trong event card
+function EventFeeEditor({ev,onSave}){
+  const [editing,setEditing]=useState(false);
+  const [cf,setCf]=useState(ev?.courtFee||"");
+  const [ef,setEf]=useState(ev?.extraFee||"");
+  const [fn,setFn]=useState(ev?.feeNote||"");
+  const [qr,setQr]=useState(ev?.qrUrl||"");
+  const iS2={background:"#0f1e33",border:"1px solid #172840",borderRadius:8,padding:"7px 10px",color:"#dde6f5",fontSize:12,width:"100%"};
+  if(!editing) return <button onClick={()=>setEditing(true)}
+    style={{fontSize:10,color:"#4a6480",border:"1px solid #172840",borderRadius:7,padding:"4px 10px",background:"transparent",cursor:"pointer"}}>
+    ✏️ Sửa chi phí
+  </button>;
+  return <div style={{background:"#060c18",borderRadius:10,padding:12,border:"1px solid #172840",marginTop:8}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>GIÁ SÂN</div><input type="number" value={cf} onChange={e=>setCf(e.target.value)} style={iS2}/></div>
+      <div><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>CHI PHÍ KHÁC</div><input type="number" value={ef} onChange={e=>setEf(e.target.value)} style={iS2}/></div>
+    </div>
+    <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>GHI CHÚ</div><input value={fn} onChange={e=>setFn(e.target.value)} style={iS2}/></div>
+    <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#4a6480",marginBottom:4}}>LINK/QR THANH TOÁN</div><input value={qr} onChange={e=>setQr(e.target.value)} style={iS2}/></div>
+    <div style={{display:"flex",gap:6}}>
+      <button onClick={()=>{onSave({...ev,courtFee:Number(cf)||0,extraFee:Number(ef)||0,feeNote:fn,qrUrl:qr});setEditing(false);}}
+        style={{flex:1,padding:"7px 0",borderRadius:8,border:"none",background:"#00c9a7",color:"#000",fontWeight:700,fontSize:12,cursor:"pointer"}}>💾 Lưu</button>
+      <button onClick={()=>setEditing(false)}
+        style={{padding:"7px 12px",borderRadius:8,border:"1px solid #172840",background:"transparent",color:"#4a6480",fontSize:12,cursor:"pointer"}}>Huỷ</button>
+    </div>
+  </div>;
+}
+
 
 const TABS=[
   {id:"dashboard", l:"📊 Tổng quan",  sm:"📊"},
@@ -1935,8 +2173,20 @@ function App(){
   const endEvent = () => {
     if(!activeEvent) return;
     const newEvents = stateRef.current.events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
-    // Giữ nguyên players với ELO/stats đã cập nhật — chỉ reset checkedIn
-    const resetPlayers = serializePlayers(stateRef.current.players.map(x=>({...x,checkedIn:false})));
+    // Finalize: update totalSpent and eventCount for players who checked in
+    const total=(Number(activeEvent.courtFee)||0)+(Number(activeEvent.extraFee)||0);
+    const ciCount=stateRef.current.players.filter(p=>p?.checkedIn).length||1;
+    const perPerson=total>0?Math.ceil(total/ciCount):0;
+    // Giữ nguyên players với ELO/stats — reset checkedIn, cộng dồn chi phí
+    const resetPlayers = serializePlayers(stateRef.current.players.map(x=>{
+      if(!x?.name) return {...x,checkedIn:false};
+      const addSpent=x.checkedIn&&x.paid?(x.paidAmount||perPerson):0;
+      const addEvent=x.checkedIn?1:0;
+      return {...x,checkedIn:false,paid:false,paidAmount:0,
+        totalSpent:(x.totalSpent||0)+addSpent,
+        eventCount:(x.eventCount||0)+addEvent,
+      };
+    }));
     setEvents(newEvents);
     setActiveEventId(null);
     setQueue([]);
@@ -1951,7 +2201,9 @@ function App(){
     dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
     gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
     createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
-    checkedIn:p.checkedIn||false,paid:p.paid||false
+    checkedIn:p.checkedIn||false,paid:p.paid||false,
+    paidAmount:p.paidAmount||0,payMethod:p.payMethod||"transfer",
+    totalSpent:p.totalSpent||0,monthSpent:p.monthSpent||0,eventCount:p.eventCount||0
   }));
 
   const handleRegister=data=>{
@@ -2241,7 +2493,7 @@ function App(){
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
-      {tab==="cost"       &&<CostTab events={events} players={players} activeEventId={activeEventId}/>}
+      {tab==="cost"       &&<CostTab events={events} players={players} activeEventId={activeEventId} onUpdatePlayer={p=>{const upd=stateRef.current.players.map(x=>x.id===p.id?p:x);setPlayers(upd);window._lastSaveAt=Date.now();STORE.save({...stateRef.current,players:serializePlayers(upd)});}} onUpdateEvent={ev=>{const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);setEvents(newEvs);window._lastSaveAt=Date.now();STORE.save({...stateRef.current,events:newEvs});}}/>}
     </main>
   </div>;
 }
