@@ -2061,7 +2061,7 @@ function App(){
         totalSpent:p.totalSpent||0, monthSpent:p.monthSpent||0, eventCount:p.eventCount||0
       })),
       courts: st.courts.map(c=>({
-        ...c, _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0
+        ...c, _startedAt: c.startedAt || null
       })),
       queue: st.queue,
     });
@@ -2086,9 +2086,9 @@ function App(){
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
         ...c,
-        startedAt: c.match && typeof c._elapsed === 'number' && c._elapsed >= 0
-          ? Date.now() - c._elapsed * 1000
-          : null
+        // _startedAt là Unix timestamp tuyệt đối → dùng trực tiếp
+        // Mọi thiết bị đều tính timer từ cùng 1 gốc → đồng bộ hoàn hảo
+        startedAt: c.match && c._startedAt ? c._startedAt : null
       })));
     }
   }, []);
@@ -2250,8 +2250,7 @@ function App(){
     window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
       courts:newCourts.map(c=>({...c,
-        _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0,
-        _startedTs: c.match ? (c._startedTs || Date.now()) : null
+        _startedAt: c.startedAt || null
       })),
       queue:newQueue
     });
@@ -2273,7 +2272,7 @@ function App(){
     showT(`Đã gán ${free.length - (stateRef.current.queue.length - q.length < free.length ? 0:0)} trận ▶`);
     window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
-      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      courts:newCourts.map(c=>({...c,_startedAt:c.startedAt||null})),
       queue:q
     });
   };
@@ -2330,7 +2329,7 @@ function App(){
     STORE.save({...stateRef.current,
       history:newHistory.slice(0,1000),
       players:serializePlayers(newPlayers),
-      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      courts:newCourts.map(c=>({...c,_startedAt:c.startedAt||null})),
       queue:newQueue
     });
 
@@ -2365,7 +2364,7 @@ function App(){
     showT(`🔄 ${safe(pOut.name)} → ${safe(pIn.name)}`);
     window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,
-      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0}))
+      courts:newCourts.map(c=>({...c,_startedAt:c.startedAt||null}))
     });
   };
 
