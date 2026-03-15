@@ -195,7 +195,8 @@ function genMatch(pool, history, dtype) {
 const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An","Nhật Hào","Khánh Duy","Gia Bảo","Tuấn Anh","Đức Huy"];
 const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu","Tú Uyên","Diễm My","Cẩm Tú","Ánh Tuyết","Ngọc Hân"];
 function buildSeed(dbPlayers){
-  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
+  // GIỮ NGUYÊN checkedIn từ DB — không reset về false
+  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p}));
   let mi=0,fi=0;
   const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr()});
   const list=[
