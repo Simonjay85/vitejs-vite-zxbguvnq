@@ -43,51 +43,49 @@
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
 
+    // ── STORE ──
+    // Mỗi thiết bị có 1 deviceId riêng để phân biệt ai đang save
+    window._deviceId = Math.random().toString(36).slice(2,8);
+    window._lastSavedVer = null; // ver của lần save cuối từ thiết bị này
+
     window.STORE = {
-      // Lưu: Firebase là nguồn chính, localStorage chỉ là cache backup
-      save(data) {
-        // Firebase trước — đây là nguồn thật
-        try { set(ref(db, FB_PATH), { ...data, _updatedAt: Date.now() }); } catch(e) { console.warn('FB save:', e); }
-        // Cache local để fallback khi mất mạng
-        try { localStorage.setItem(LS_KEY, JSON.stringify({...data, _cachedAt: Date.now()})); } catch(e) {}
+      async save(data) {
+        const payload = {
+          ...data,
+          _updatedAt: Date.now(),
+          _deviceId: window._deviceId, // đánh dấu thiết bị nào save
+        };
+        // Lưu cache local ngay lập tức (không chờ Firebase)
+        try { localStorage.setItem(LS_KEY, JSON.stringify({...payload, _cachedAt: Date.now()})); } catch(e) {}
+        // Ghi Firebase (async, không cần await)
+        try { set(ref(db, FB_PATH), payload); } catch(e) { console.warn('FB save:', e); }
+        // Đánh dấu thời gian save gần nhất
+        window._lastSavedAt = Date.now();
       },
 
-      // Load: LUÔN lấy từ Firebase — đảm bảo đồng bộ mọi thiết bị
       async load() {
         try {
           const snap = await get(ref(db, FB_PATH));
           if(snap.exists()) {
             const d = snap.val();
-            // Cập nhật cache
             try { localStorage.setItem(LS_KEY, JSON.stringify({...d, _cachedAt: Date.now()})); } catch(e) {}
-            console.log('📡 Loaded from Firebase, _updatedAt:', d._updatedAt ? new Date(d._updatedAt).toLocaleTimeString() : 'N/A');
             return d;
           }
         } catch(e) {
-          console.warn('⚠️ Firebase unavailable, falling back to cache:', e.message);
-          // Chỉ dùng cache khi Firebase thực sự không kết nối được
           try {
             const s = localStorage.getItem(LS_KEY);
-            if(s) {
-              const d = JSON.parse(s);
-              if(d && typeof d === 'object') {
-                console.log('📦 Using local cache from:', d._cachedAt ? new Date(d._cachedAt).toLocaleTimeString() : 'unknown');
-                return d;
-              }
-            }
+            if(s) { const d=JSON.parse(s); if(d&&typeof d==='object') return d; }
           } catch(e2) {}
         }
         return null;
       },
 
-      // Subscribe realtime — mọi thay đổi trên bất kỳ thiết bị nào đều push xuống đây
       subscribe(cb) {
         return onValue(ref(db, FB_PATH), snap => {
-          if(snap.exists()) {
-            const d = snap.val();
-            try { localStorage.setItem(LS_KEY, JSON.stringify({...d, _cachedAt: Date.now()})); } catch(e) {}
-            cb(d);
-          }
+          if(!snap.exists()) return;
+          const d = snap.val();
+          try { localStorage.setItem(LS_KEY, JSON.stringify({...d, _cachedAt: Date.now()})); } catch(e) {}
+          cb(d);
         });
       }
     };
@@ -110,11 +108,11 @@
   <div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#4a6480;font-family:sans-serif;">Đang tải... 🏓</div></div>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useCallback } = React;
-// STORE proxy — đọc window.STORE động, không bị undefined lúc parse
+// STORE proxy — async save
 const STORE = {
-  save(data)      { return window.STORE?.save(data); },
-  load()          { return window.STORE?.load() ?? Promise.resolve(null); },
-  subscribe(cb)   { return window.STORE?.subscribe(cb) ?? (()=>{}); }
+  save(data)    { return window.STORE?.save(data) ?? Promise.resolve(); },
+  load()        { return window.STORE?.load() ?? Promise.resolve(null); },
+  subscribe(cb) { return window.STORE?.subscribe(cb) ?? (()=>{}); }
 };
 
 
@@ -2082,49 +2080,38 @@ function App(){
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
         ...c,
-        // Tính startedAt từ _elapsed để đồng bộ giữa các thiết bị
-        startedAt: c.match && c._elapsed != null && c._elapsed >= 0
+        // Dùng _elapsed từ Firebase để tính startedAt đồng bộ mọi thiết bị
+        // _elapsed = số giây đã trôi qua khi save → startedAt = now - elapsed
+        startedAt: c.match && typeof c._elapsed === 'number' && c._elapsed >= 0
           ? Date.now() - c._elapsed * 1000
-          : c.match ? (c.startedAt || Date.now()) : null
+          : null
       })));
     }
   }, []);
 
   // ── LOAD
   useEffect(()=>{
-    const db = window.__initialData;
-    if(db) applyDb(db);
+    const initDb = window.__initialData;
+    if(initDb) applyDb(initDb);
     setLoading(false);
 
-    // Subscribe Firebase realtime
-    let isFirstFire = true;
+    // Subscribe: nhận tất cả update từ Firebase
     const unsub = window.STORE?.subscribe((fbData) => {
-      if(isFirstFire) {
-        // Firebase luôn fire ngay khi subscribe — apply data mới nhất
-        console.log('📡 Firebase initial data');
-        applyDb(fbData);
-        isFirstFire = false;
-        return;
-      }
-      // Sau lần đầu: check role từ sessionStorage
-      let role = null;
-      try { const s=sessionStorage.getItem('pb_me'); role=s?JSON.parse(s)?.role:null; } catch{}
+      if(!fbData) return;
 
-      if(!role) {
-        // Chưa login — apply full (để login page có accounts mới nhất)
-        applyDb(fbData);
+      // Bỏ qua nếu chính thiết bị này vừa save trong 1 giây vừa rồi
+      // (tránh apply lại data mình vừa set — đã có trong state rồi)
+      const isMyOwnSave = fbData._deviceId === window._deviceId &&
+                          window._lastSavedAt &&
+                          (Date.now() - window._lastSavedAt) < 1000;
+      if(isMyOwnSave) {
+        console.log('⏭️ Own save echo — skipped');
         return;
       }
-      if(role === ROLES.VIEWER) {
-        // Viewer luôn nhận realtime update đầy đủ
-        applyDb(fbData);
-        return;
-      }
-      // Admin/Host: CHỈ sync accounts (để host mới thêm đăng nhập được)
-      // KHÔNG apply players/courts/queue để tránh overwrite data đang dùng
-      if(fbData?.accounts?.admins?.length > 0) {
-        setAccounts(fbData.accounts);
-      }
+
+      // Thiết bị khác save → apply toàn bộ để đồng bộ
+      console.log('🔄 Remote update from device:', fbData._deviceId);
+      applyDb(fbData);
     });
     if(unsub) unsubRef.current = unsub;
     return () => { if(unsubRef.current) unsubRef.current(); };
