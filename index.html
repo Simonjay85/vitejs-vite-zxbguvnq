@@ -2081,7 +2081,11 @@ function App(){
     if(Array.isArray(db.queue)) setQueue(db.queue);
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
-        ...c, startedAt: c.match && c._elapsed ? Date.now()-c._elapsed*1000 : null
+        ...c,
+        // Tính startedAt từ _elapsed để đồng bộ giữa các thiết bị
+        startedAt: c.match && c._elapsed != null && c._elapsed >= 0
+          ? Date.now() - c._elapsed * 1000
+          : c.match ? (c.startedAt || Date.now()) : null
       })));
     }
   }, []);
@@ -2126,15 +2130,16 @@ function App(){
     return () => { if(unsubRef.current) unsubRef.current(); };
   }, [applyDb]);
 
-  // Auto-save debounce 2s
+  // Auto-save: chỉ cho history và events (không có dependency trên players/courts để tránh race condition)
   useEffect(()=>{
     if(!me||me.role===ROLES.VIEWER) return;
+    if(!history.length && !activeEventId) return;
     clearTimeout(saveRef.current);
     saveRef.current=setTimeout(()=>{
       window._lastSaveAt=Date.now();
       saveAll();
-    },2000);
-  },[history,courts,queue,activeEventId,numCourts,me]);
+    },3000);
+  },[history,activeEventId,numCourts,me]);
 
   // Timer cho sân
   useEffect(()=>{
@@ -2263,7 +2268,10 @@ function App(){
     showT(`Trận bắt đầu tại ${courts.find(c=>c.id===cid)?.name}! 🏓`);
     window._lastSaveAt=Date.now();
     STORE.save({...stateRef.current,
-      courts:newCourts.map(c=>({...c,_elapsed:c.startedAt?Math.floor((Date.now()-c.startedAt)/1000):0})),
+      courts:newCourts.map(c=>({...c,
+        _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0,
+        _startedTs: c.match ? (c._startedTs || Date.now()) : null
+      })),
       queue:newQueue
     });
   };
@@ -2351,18 +2359,13 @@ function App(){
 
   const toggleCI=id=>{
     setPlayers(prev=>{
-      const upd=prev.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x);
-      const p=prev.find(p=>p.id===id);
-      showT(`${safe(p?.name)} ${p?.checkedIn?"rời session":"check in ✅"}`);
-      // Dùng stateRef nên saveAll luôn có players mới nhất
+      const p=prev.find(x=>x.id===id);
+      if(!p) return prev;
+      const newCI = p.checkedIn !== true; // toggle chính xác
+      const upd=prev.map(x=>x.id===id?{...x,checkedIn:newCI}:x);
+      showT(`${safe(p.name)} ${newCI?"check in ✅":"rời session"}`);
       window._lastSaveAt = Date.now();
-      STORE.save({...stateRef.current, players:upd.map(p=>({
-        id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.baseElo||p.elo,
-        dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
-        gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
-        createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
-        checkedIn:p.checkedIn||false
-      }))});
+      STORE.save({...stateRef.current, players:serializePlayers(upd)});
       return upd;
     });
   };
