@@ -2,8 +2,20 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Pickleball Social 🏓</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#00c9a7"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Pickleball"/>
+  <link rel="apple-touch-icon" href="/icons/icon-152.png"/>
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png"/>
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
   <style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#060c18;}</style>
   <!-- React 18 -->
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -2258,5 +2270,31 @@ if (window._fbReady) {
   }, 5000);
 }
 </script>
+  <script>
+    if('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(r => console.log('SW registered ✅'))
+          .catch(e => console.warn('SW failed:', e));
+      });
+    }
+    // iOS install prompt
+    window.addEventListener('load', () => {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isStandalone = window.navigator.standalone === true;
+      if(isIOS && !isStandalone && !sessionStorage.getItem('ios-prompt-shown')) {
+        sessionStorage.setItem('ios-prompt-shown', '1');
+        setTimeout(() => {
+          const d = document.createElement('div');
+          d.innerHTML = `<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0b1524;border:1px solid #00c9a7;border-radius:16px;padding:14px 18px;color:#dde6f5;font-family:sans-serif;font-size:13px;z-index:9999;max-width:320px;width:90%;box-shadow:0 8px 32px #000a;text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px">📲 Cài app</div>
+            <div style="color:#4a6480;font-size:12px;margin-bottom:10px">Nhấn <b style="color:#00c9a7">Share</b> → <b style="color:#00c9a7">"Add to Home Screen"</b> để dùng như app thật</div>
+            <button onclick="this.parentElement.parentElement.remove()" style="background:#00c9a7;color:#000;border:none;border-radius:8px;padding:7px 20px;font-weight:700;cursor:pointer;font-size:12px">OK</button>
+          </div>`;
+          document.body.appendChild(d);
+        }, 3000);
+      }
+    });
+  </script>
 </body>
 </html>
