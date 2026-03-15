@@ -50,16 +50,18 @@
 
     window.STORE = {
       async save(data) {
-        // Đánh dấu NGAY để subscribe bỏ qua echo
         window._lastSavedAt = Date.now();
+        // Firebase xóa field null và array rỗng [] — dùng placeholder
         const payload = {
           ...data,
+          // activeEventId=null → lưu "_noEvent" để Firebase không xóa field
+          activeEventId: data.activeEventId || "_noEvent",
+          // queue=[] → lưu array có 1 phần tử null để Firebase không xóa
+          queue: (data.queue && data.queue.length > 0) ? data.queue : ["_empty"],
           _updatedAt: window._lastSavedAt,
           _deviceId: window._deviceId,
         };
-        // Cache local ngay lập tức
         try { localStorage.setItem(LS_KEY, JSON.stringify({...payload, _cachedAt: window._lastSavedAt})); } catch(e) {}
-        // Ghi Firebase (fire-and-forget)
         try { set(ref(db, FB_PATH), payload); } catch(e) { console.warn('FB save:', e); }
       },
 
@@ -2074,14 +2076,16 @@ function App(){
     if(Array.isArray(db.events) && db.events.length > 0) setEvents(db.events);
     if(Array.isArray(db.players) && db.players.length > 0) setPlayers(buildSeed(db.players));
     if(Array.isArray(db.history) && db.history.length > 0) setHistory(db.history);
-    if(db.activeEventId !== undefined) setActiveEventId(db.activeEventId||null);
+    // Decode placeholder: "_noEvent" = null, undefined = null
+    const evId = (!db.activeEventId || db.activeEventId === '_noEvent') ? null : db.activeEventId;
+    setActiveEventId(evId);
     if(typeof db.numCourts === 'number' && db.numCourts >= 2) setNumCourts(db.numCourts);
-    if(Array.isArray(db.queue)) setQueue(db.queue);
+    // Decode queue placeholder: ["_empty"] = []
+    const q = Array.isArray(db.queue) ? db.queue.filter(x=>x && x !== '_empty') : [];
+    setQueue(q);
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
         ...c,
-        // Dùng _elapsed từ Firebase để tính startedAt đồng bộ mọi thiết bị
-        // _elapsed = số giây đã trôi qua khi save → startedAt = now - elapsed
         startedAt: c.match && typeof c._elapsed === 'number' && c._elapsed >= 0
           ? Date.now() - c._elapsed * 1000
           : null
