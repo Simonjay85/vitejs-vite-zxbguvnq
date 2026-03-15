@@ -50,17 +50,17 @@
 
     window.STORE = {
       async save(data) {
+        // Đánh dấu NGAY để subscribe bỏ qua echo
+        window._lastSavedAt = Date.now();
         const payload = {
           ...data,
-          _updatedAt: Date.now(),
-          _deviceId: window._deviceId, // đánh dấu thiết bị nào save
+          _updatedAt: window._lastSavedAt,
+          _deviceId: window._deviceId,
         };
-        // Lưu cache local ngay lập tức (không chờ Firebase)
-        try { localStorage.setItem(LS_KEY, JSON.stringify({...payload, _cachedAt: Date.now()})); } catch(e) {}
-        // Ghi Firebase (async, không cần await)
+        // Cache local ngay lập tức
+        try { localStorage.setItem(LS_KEY, JSON.stringify({...payload, _cachedAt: window._lastSavedAt})); } catch(e) {}
+        // Ghi Firebase (fire-and-forget)
         try { set(ref(db, FB_PATH), payload); } catch(e) { console.warn('FB save:', e); }
-        // Đánh dấu thời gian save gần nhất
-        window._lastSavedAt = Date.now();
       },
 
       async load() {
@@ -2095,38 +2095,36 @@ function App(){
     if(initDb) applyDb(initDb);
     setLoading(false);
 
-    // Subscribe: nhận tất cả update từ Firebase
+    // Subscribe: nhận update từ Firebase
     const unsub = window.STORE?.subscribe((fbData) => {
       if(!fbData) return;
 
-      // Bỏ qua nếu chính thiết bị này vừa save trong 1 giây vừa rồi
-      // (tránh apply lại data mình vừa set — đã có trong state rồi)
-      const isMyOwnSave = fbData._deviceId === window._deviceId &&
-                          window._lastSavedAt &&
-                          (Date.now() - window._lastSavedAt) < 1000;
-      if(isMyOwnSave) {
-        console.log('⏭️ Own save echo — skipped');
+      // Skip nếu đây là echo từ chính mình (trong vòng 5 giây)
+      if(fbData._deviceId === window._deviceId &&
+         window._lastSavedAt &&
+         (Date.now() - window._lastSavedAt) < 5000) {
+        console.log('⏭️ Own echo skipped');
         return;
       }
 
-      // Thiết bị khác save → apply toàn bộ để đồng bộ
-      console.log('🔄 Remote update from device:', fbData._deviceId);
+      // Data từ thiết bị khác → apply để đồng bộ
+      console.log('🔄 Remote:', fbData._deviceId, 'updated:', fbData._updatedAt ? new Date(fbData._updatedAt).toLocaleTimeString() : '?');
       applyDb(fbData);
     });
     if(unsub) unsubRef.current = unsub;
     return () => { if(unsubRef.current) unsubRef.current(); };
   }, [applyDb]);
 
-  // Auto-save: chỉ cho history và events (không có dependency trên players/courts để tránh race condition)
+  // Auto-save: chỉ cho history (không trigger với activeEventId/players/courts)
   useEffect(()=>{
     if(!me||me.role===ROLES.VIEWER) return;
-    if(!history.length && !activeEventId) return;
+    if(!history.length) return;
     clearTimeout(saveRef.current);
     saveRef.current=setTimeout(()=>{
-      window._lastSaveAt=Date.now();
+      window._lastSavedAt=Date.now();
       saveAll();
-    },3000);
-  },[history,activeEventId,numCourts,me]);
+    },5000);
+  },[history,me]);
 
   // Timer cho sân
   useEffect(()=>{
@@ -2174,6 +2172,8 @@ function App(){
 
   const endEvent = () => {
     if(!activeEvent) return;
+    // Đánh dấu ngay để subscribe bỏ qua echo trong 5 giây
+    window._lastSavedAt = Date.now();
     const newEvents = stateRef.current.events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
     // Finalize: update totalSpent and eventCount for players who checked in
     const total=(Number(activeEvent.courtFee)||0)+(Number(activeEvent.extraFee)||0);
