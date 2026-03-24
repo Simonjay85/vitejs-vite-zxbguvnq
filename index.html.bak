@@ -413,7 +413,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
                 color:numCourts===n?G.accent:G.muted}}>
               {n}
             </button>
-              })}
+          ))}
         </div>
       </Fld>
       <Fld label="👥 SỐ NGƯỜI DỰ KIẾN" hint={maxPlayers>0&&calcPerPerson>0?`≈ ${calcPerPerson.toLocaleString("vi-VN")}đ/người`:"Để trống = không giới hạn"}>
@@ -426,7 +426,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
                 color:maxPlayers===n?G.purple:G.muted}}>
               {n===0?"∞":n}
             </button>
-              })}
+          ))}
         </div>
         <input type="number" min="1" max="200"
           value={maxPlayers||""}
@@ -762,7 +762,7 @@ function ScoreModal({match,onConfirm,onClose}){
     <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
       {[[11,0],[11,5],[11,7],[11,9],[12,10],[13,11]].map(([w,l])=>(
         <button key={`${w}-${l}`} onClick={()=>{setS1(String(w));setS2(String(l));}} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${s1===String(w)&&s2===String(l)?G.accent:G.border}`,background:s1===String(w)&&s2===String(l)?G.accent+"22":"transparent",color:s1===String(w)&&s2===String(l)?G.accent:G.muted,cursor:"pointer",fontSize:10,fontWeight:600}}>{w}-{l}</button>
-              })}
+      ))}
     </div>
     <div style={{display:"flex",gap:7}}>
       <button onClick={()=>{if(!ok)return;const sw=wi===1?n1:n2,sl=wi===1?n2:n1;onConfirm(wi,sw,sl);}} disabled={!ok} style={{...bP,flex:1,padding:"10px 0",opacity:ok?1:.4}}>✅ Xác nhận</button>
@@ -1161,7 +1161,7 @@ function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,
           <div style={{fontSize:8,color:G.accent,fontWeight:700,letterSpacing:1,marginBottom:2}}>TEAM A</div>
           {(m.team1||[]).filter(Boolean).map(p=>(
             <div key={p.id} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
-              })}
+          ))}
         </div>
         <div style={{textAlign:"center",fontSize:8,color:G.dim,marginBottom:4}}>VS · Δ{diff}{diff<40?"✓":"⚠"}</div>
         {/* Team B */}
@@ -1169,7 +1169,7 @@ function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,
           <div style={{fontSize:8,color:G.gold,fontWeight:700,letterSpacing:1,marginBottom:2}}>TEAM B</div>
           {(m.team2||[]).filter(Boolean).map(p=>(
             <div key={p.id} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
-              })}
+          ))}
         </div>
         {!readOnly&&<div style={{display:"flex",gap:4}}>
           <button onClick={()=>onScore(court.id)} style={{...bP,flex:1,padding:"7px 0",fontSize:11}}>📊 Tỉ số</button>
@@ -1292,7 +1292,7 @@ function Minigames() {
         )}
         {snake.map((seg, i) => (
           <div key={i} style={{position: "absolute", left: `${(seg.x/BOARD_SIZE)*100}%`, top: `${(seg.y/BOARD_SIZE)*100}%`, width: `${(1/BOARD_SIZE)*100}%`, height: `${(1/BOARD_SIZE)*100}%`, background: i === 0 ? "#a78bfa" : "#8b5cf6", borderRadius: 2}} />
-              })}
+        ))}
         <div style={{position: "absolute", left: `${(food.x/BOARD_SIZE)*100}%`, top: `${(food.y/BOARD_SIZE)*100}%`, width: `${(1/BOARD_SIZE)*100}%`, height: `${(1/BOARD_SIZE)*100}%`, background: "#f43f5e", borderRadius: "50%"}} />
       </div>
       <div style={{marginTop: 12, fontSize: 10, color: "#4a6480", textAlign: "center"}}>Use <kbd>W,A,S,D</kbd> or <kbd>Arrow Keys</kbd> to play</div>
@@ -1427,7 +1427,7 @@ function ViewerMode({me,players,courts,history,queue,elapsed,events,activeEventI
                 <button key={p.id} onClick={()=>setChallenging(prev=>({...prev, partner: p.id===prev.partner?null:p}))} style={{padding:"6px 10px", borderRadius:6, border:`1px solid ${challenging.partner?.id===p.id?G.accent:G.border}`, background:challenging.partner?.id===p.id?G.accent+"22":"transparent", color:challenging.partner?.id===p.id?G.accent:G.text, fontSize:11, fontWeight:700, cursor:"pointer"}}>
                   {p.name}
                 </button>
-              })}
+              ))}
             </div>
           </div>
 
@@ -1447,7 +1447,7 @@ function ViewerMode({me,players,courts,history,queue,elapsed,events,activeEventI
                 }} style={{padding:"6px 10px", borderRadius:6, border:`1px solid ${isSelected?G.gold:G.border}`, background:isSelected?G.gold+"22":"transparent", color:isSelected?G.gold:G.text, fontSize:11, fontWeight:700, cursor:"pointer"}}>
                   {p.name}
                 </button>
-              })}
+              ))}
             </div>
           </div>
 
@@ -1711,7 +1711,7 @@ function AnalyticsView({players,history,courts}){
         <div style={{display:"flex",alignItems:"flex-end",gap:12,justifyContent:"center",height:70}}>
           {[{l:"♂",v:males,c:"#60a5fa"},{l:"♀",v:females,c:"#f472b6"}].map(g=>(
             <div key={g.l} style={{textAlign:"center"}}><div style={{height:`${ci.length?(g.v/ci.length)*60:0}px`,minHeight:2,width:36,background:g.c,borderRadius:"4px 4px 0 0"}}/><div style={{fontSize:16,fontWeight:900,color:g.c,marginTop:4}}>{g.v}</div><div style={{fontSize:8,color:G.muted}}>{g.l}</div></div>
-              })}
+          ))}
         </div>
       </div>
       <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,padding:13}}>
@@ -1725,7 +1725,7 @@ function AnalyticsView({players,history,courts}){
         <div style={{fontSize:8,fontWeight:700,color:G.muted,letterSpacing:1,marginBottom:10}}>📊 OVERVIEW</div>
         {[{l:"Check-in",v:ci.length,c:G.accent},{l:"Đang đấu",v:courts.filter(c=>c.match).length,c:G.red},{l:"Trận xong",v:history.length,c:"#34d399"},{l:"Couples",v:Math.round(players.filter(p=>p?.coupleId).length/2),c:G.pink}].map(s=>(
           <div key={s.l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}><span style={{fontSize:10,color:G.muted}}>{s.l}</span><span style={{fontSize:11,fontWeight:800,color:s.c}}>{s.v}</span></div>
-              })}
+        ))}
       </div>
     </div>
   </div>;
@@ -1853,7 +1853,7 @@ function HistoryTab({history, events, players, readOnly, onEditEvent, onDeleteEv
           <div key={s.l} style={{textAlign:"center",padding:"10px 6px",borderRadius:10,background:G.panel,border:`1px solid ${G.border}`}}>
             <div style={{fontSize:20,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:8,color:G.muted,marginTop:2}}>{s.l}</div>
           </div>
-              })}
+        ))}
       </div>
       {/* By dtype */}
       <div style={{background:G.panel,borderRadius:10,border:`1px solid ${G.border}`,padding:"10px 14px",marginBottom:12}}>
@@ -2011,7 +2011,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
           <div key={s.l} style={{padding:"10px 20px",borderRadius:12,background:s.c+"18",border:`1px solid ${s.c}44`,textAlign:"center"}}>
             <div style={{fontSize:28,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:G.muted}}>{s.l}</div>
           </div>
-              })}
+        ))}
       </div>
       <div style={{fontSize:56,marginBottom:12}}>🏓</div>
       <div style={{fontSize:26,fontWeight:900,color:"#fff",marginBottom:8}}>Chào mừng!</div>
@@ -2040,7 +2040,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
             <span style={{fontSize:13,fontWeight:700,color:G.text,flex:1}}>{safe(p.name)}</span>
             <span style={{fontSize:13,fontWeight:800,color:G.gold}}>{p.k>0?"+":""}{p.k}</span>
           </div>
-              })}
+        ))}
       </div>}
     </div>
   </div>;
@@ -2063,7 +2063,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
             <button key={g.v} onClick={()=>sf("gender",g.v)} style={{padding:"16px",borderRadius:12,cursor:"pointer",fontWeight:700,fontSize:16,textAlign:"center",border:`3px solid ${form.gender===g.v?g.c:G.border}`,background:form.gender===g.v?g.c+"25":"transparent",color:form.gender===g.v?g.c:G.muted,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
               <span style={{fontSize:28}}>{g.e}</span>{g.l}
             </button>
-              })}
+          ))}
         </div>
       </div>
       <div style={{marginBottom:16}}>
@@ -2105,7 +2105,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
               {o.l}
               <span style={{fontSize:9,fontWeight:400}}>{o.sub}</span>
             </button>
-              })}
+          ))}
         </div>
         {form.paid&&<div style={{display:"flex",gap:6}}>
           {[{v:"transfer",l:"🏦 Chuyển khoản"},{v:"cash",l:"💵 Tiền mặt"}].map(m=>(
@@ -2116,7 +2116,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
                 color:form.payMethod===m.v?G.accent:G.muted}}>
               {m.l}
             </button>
-              })}
+          ))}
         </div>}
       </div>
 
@@ -2126,7 +2126,7 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
           <option value="">-- Không kết đôi --</option>
           {checkedIn.filter(p=>safe(p.name).toLowerCase()!==safe(form.name).toLowerCase().trim()).map(p=>(
             <option key={p.id} value={p.id}>{safe(p.name)} ({p.gender==="M"?"Nam":"Nữ"}, {p.skill})</option>
-              })}
+          ))}
         </select>
       </div>}
       {err&&<div style={{padding:"12px 16px",borderRadius:10,background:G.red+"15",border:`1px solid ${G.red}44`,color:G.red,fontSize:13,fontWeight:600,marginBottom:14}}>⚠️ {err}</div>}
@@ -2434,7 +2434,7 @@ function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
                 {p.monthSpent>0&&<div style={{fontSize:9,color:G.muted}}>tháng này: {fmtVND(p.monthSpent)}</div>}
               </div>
             </div>
-              })}
+          ))}
           {playerStats.filter(p=>p.spent===0&&p.gamesPlayed===0).length>0&&
             <div style={{fontSize:10,color:G.dim,textAlign:"center",padding:"8px 0"}}>
               + {playerStats.filter(p=>p.spent===0&&p.gamesPlayed===0).length} người chưa có dữ liệu
@@ -2598,7 +2598,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
           <div style={{fontSize:26,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div>
           <div style={{fontSize:9,color:G.muted,marginTop:3,fontWeight:600}}>{s.l}</div>
         </div>
-              })}
+      ))}
     </div>
 
     {/* Queue + Actions — stack dọc trên mobile */}
@@ -2719,7 +2719,7 @@ function QueueTab({queue,setQueue,courts,available,history,elapsed,onScore,onAss
             {(p.gamesPlayed||0)===0&&<span style={{fontSize:9,color:G.gold}}>🆕</span>}
             <span style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</span><SBadge skill={p.skill}/><GBadge gender={p.gender}/>
           </div>
-              })}
+        ))}
       </div>}
     </div>
     {queue.length>0&&<div style={{marginBottom:11}}>
@@ -3312,7 +3312,7 @@ function App(){
                 <button onClick={() => rejectChallenge(ch.id)} style={{...bS, color:G.red, border:`1px solid ${G.red}44`, padding:"6px 14px", fontSize:11}}>Từ chối ✕</button>
               </div>
             </div>
-              })}
+          ))}
         </div>
       </div>
     )}

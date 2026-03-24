@@ -43,6 +43,13 @@ const DB = {
 };
 
 // ── KOOTORO
+const getTier=(k)=>{
+  if(k<0) return {name:"Hạng Chì", color:"#4a6480", next:0, prev:-50, icon:"⚙️"};
+  if(k<15) return {name:"Đồng", color:"#cd7f32", next:15, prev:0, icon:"🥉"};
+  if(k<35) return {name:"Bạc", color:"#c0c0c0", next:35, prev:15, icon:"🥈"};
+  if(k<70) return {name:"Vàng", color:"#ffd700", next:70, prev:35, icon:"🥇"};
+  return {name:"Elite", color:"#00c9a7", next:null, prev:70, icon:"💎"};
+};
 function kootoro(player, history) {
   if(!player||!history) return 0;
   let k=0;
@@ -92,7 +99,7 @@ const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","
 function buildSeed(dbPlayers){
   if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
   let mi=0,fi=0;
-  const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr()});
+  const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr(),viewerCode:genCode()});
   const list=[
     mk("M","3.5+",true,"any"),mk("M","3.5+",true,"mixed"),mk("M","3.5",true,"any"),mk("F","3.5",true,"mixed"),mk("M","3.5",true,"male"),mk("F","3.5",true,"female"),mk("M","3.5",true,"mixed"),mk("F","3.5",false,"any"),mk("M","3.5",true,"any"),
     mk("F","3.0",true,"mixed"),mk("M","3.0",true,"any"),mk("F","3.0",true,"any"),mk("M","3.0",true,"male"),mk("F","3.0",false,"mixed"),mk("M","3.0",true,"any"),mk("F","3.0",true,"female"),mk("M","3.0",false,"any"),mk("F","3.0",true,"any"),mk("M","3.0",true,"mixed"),
@@ -177,7 +184,7 @@ function EventModal({event, onSave, onClose, isNew}){
 // ══════════════════════════════════════
 // LOGIN
 // ══════════════════════════════════════
-function Login({accounts,onLogin,loading}){
+function Login({accounts,players,onLogin,loading}){
   const [mode,setMode]=useState("choose");
   const [user,setUser]=useState(""),[pass,setPass]=useState(""),[code,setCode]=useState(""),[err,setErr]=useState("");
   const tryAdmin=()=>{
@@ -186,9 +193,11 @@ function Login({accounts,onLogin,loading}){
     u?onLogin(u):setErr("Tên hoặc mật khẩu không đúng");
   };
   const tryViewer=()=>{
-    safe(code).trim().toUpperCase()===(accounts?.viewerCode||"").toUpperCase()
-      ?onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""})
-      :setErr("Mã truy cập không đúng");
+    const uppercaseCode = safe(code).trim().toUpperCase();
+    if(uppercaseCode===(accounts?.viewerCode||"").toUpperCase()) return onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""});
+    const p = players?.find(x => x.viewerCode === uppercaseCode);
+    if(p) return onLogin({...p, role:ROLES.VIEWER, password:""});
+    setErr("Mã truy cập không đúng");
   };
   if(loading) return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",color:G.muted,fontSize:14}}>Đang tải... ⏳</div>;
   return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -461,6 +470,128 @@ function CustomModal({players,onAdd,onClose}){
 }
 
 // ══════════════════════════════════════
+// VIEWER CHALLENGE MODAL
+// ══════════════════════════════════════
+function ViewerChallengeModal({me,players,onChallenge,onClose}){
+  const av = players.filter(p=>p&&p.checkedIn&&p.name&&p.id!==me.id);
+  const [partner,setPartner]=useState("");
+  const [opp1,setOpp1]=useState("");
+  const [opp2,setOpp2]=useState("");
+  const [err,setErr]=useState("");
+  
+  const submit=()=>{
+    if(!partner||!opp1||!opp2){setErr("Cần chọn đủ 3 người");return;}
+    if(new Set([partner,opp1,opp2]).size!==3){setErr("Không thể chọn trùng người");return;}
+    const p=av.find(x=>x.id===partner);
+    const o1=av.find(x=>x.id===opp1);
+    const o2=av.find(x=>x.id===opp2);
+    if(p&&o1&&o2) {
+      onChallenge({challenger:me, partner:p, opp1:o1, opp2:o2});
+      onClose();
+    }
+  }
+  return <MBox title="⚔️ Thách đấu 2v2" sub="Gửi yêu cầu khởi tạo trận đấu đến Host" onClose={onClose} w={420}>
+    <Fld label="ĐỒNG ĐỘI CỦA BẠN">
+      <select value={partner} onChange={e=>{setPartner(e.target.value);setErr("");}} style={{...iS,padding:"10px"}}>
+        <option value="">-- Chọn đồng đội --</option>
+        {av.map(p=><option key={p.id} value={p.id}>{safe(p.name)} ({p.skill})</option>)}
+      </select>
+    </Fld>
+    <div style={{textAlign:"center",color:G.red,fontWeight:900,margin:"10px 0"}}>VS</div>
+    <Fld label="ĐỐI THỦ 1">
+      <select value={opp1} onChange={e=>{setOpp1(e.target.value);setErr("");}} style={{...iS,padding:"10px"}}>
+        <option value="">-- Chọn đối thủ 1 --</option>
+        {av.map(p=><option key={p.id} value={p.id}>{safe(p.name)} ({p.skill})</option>)}
+      </select>
+    </Fld>
+    <Fld label="ĐỐI THỦ 2">
+      <select value={opp2} onChange={e=>{setOpp2(e.target.value);setErr("");}} style={{...iS,padding:"10px"}}>
+        <option value="">-- Chọn đối thủ 2 --</option>
+        {av.map(p=><option key={p.id} value={p.id}>{safe(p.name)} ({p.skill})</option>)}
+      </select>
+    </Fld>
+    {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",background:G.red+"15",borderRadius:6}}>{err}</div>}
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={submit} style={{...bP,flex:1,background:`linear-gradient(135deg,${G.purple},${G.pink})`}}>⚔️ Gửi thách đấu</button>
+      <button onClick={onClose} style={bS}>Huỷ</button>
+    </div>
+  </MBox>;
+}
+
+// ══════════════════════════════════════
+// PLAYER PROFILE MODAL
+// ══════════════════════════════════════
+function PlayerProfileModal({p, history, onClose, isSA, onUpdatePlayer, toast}){
+  if(!p) return null;
+  const k = Math.round(kootoro(p, history)*10)/10;
+  const tier = getTier(k);
+  const wr = (p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed)*100):0;
+  
+  let pct = 100;
+  if(tier.next !== null){
+     const range = tier.next - tier.prev;
+     const cur = k - tier.prev;
+     pct = Math.max(0, Math.min(100, (cur/range)*100));
+  }
+  
+  const v = p.membership;
+  const isVip = v && new Date(v.expiresAt) > new Date();
+  
+  const grantVip = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    onUpdatePlayer({...p, membership: { type: days===7?"weekly":"monthly", expiresAt: d.toISOString() }});
+    toast(`Đã gia hạn VIP ${days===7?"Weekly":"Monthly"} cho ${p.name} 💎`);
+  };
+
+  return <MBox title="Hồ Sơ Cầu Thủ" onClose={onClose} w={400}>
+     <div style={{textAlign:"center", marginBottom:16}}>
+       <div style={{width:80,height:80,borderRadius:24,background:`linear-gradient(135deg,${tier.color},${G.panel})`,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,border:`2px solid ${tier.color}66`}}>
+         {p.gender==="M"?"👦":"👧"}
+       </div>
+       <div style={{fontSize:20,fontWeight:900,color:G.text,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+         {safe(p.name)} {isVip&&<span title="Thành viên VIP" style={{fontSize:14}}>💎</span>}
+       </div>
+       <div style={{fontSize:12,color:tier.color,fontWeight:800,marginTop:4}}>{tier.icon} {tier.name}</div>
+     </div>
+
+     <div style={{background:G.card,borderRadius:12,padding:14,border:`1px solid ${G.border}`,marginBottom:16}}>
+       <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:G.dim,fontWeight:700,marginBottom:6}}>
+         <span>KOOTORO RATING</span>
+         <span>{tier.next ? `${k} / ${tier.next}` : `${k} (MAX)`}</span>
+       </div>
+       <div style={{height:8,background:G.bg,borderRadius:4,overflow:"hidden"}}>
+         <div style={{height:"100%",width:`${pct}%`,background:tier.color,borderRadius:4}}/>
+       </div>
+     </div>
+     
+     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+       <div style={{background:G.panel,borderRadius:10,padding:10,textAlign:"center",border:`1px solid ${G.border}`}}>
+         <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:4}}>TỈ LỆ THẮNG</div>
+         <div style={{fontSize:16,color:G.accent,fontWeight:800}}>{wr}%</div>
+       </div>
+       <div style={{background:G.panel,borderRadius:10,padding:10,textAlign:"center",border:`1px solid ${G.border}`}}>
+         <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:4}}>SỐ TRẬN</div>
+         <div style={{fontSize:16,color:G.text,fontWeight:800}}>{p.gamesPlayed||0}</div>
+       </div>
+       <div style={{background:G.panel,borderRadius:10,padding:10,textAlign:"center",border:`1px solid ${G.border}`}}>
+         <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:4}}>ELO</div>
+         <div style={{fontSize:16,color:G.gold,fontWeight:800}}>{p.elo||"?"}</div>
+       </div>
+     </div>
+
+     {isSA && <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14}}>
+       <div style={{fontSize:10,fontWeight:800,color:G.gold,marginBottom:8}}>GIA HẠN MEMBERSHIP (ADMIN)</div>
+       {isVip && <div style={{fontSize:11,color:G.muted,marginBottom:8}}>Hết hạn: {new Date(v.expiresAt).toLocaleDateString("vi-VN")}</div>}
+       <div style={{display:"flex",gap:8}}>
+         <button onClick={()=>grantVip(7)} style={{...bP,flex:1,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:11,padding:"7px 0"}}>+7 Ngày (Weekly)</button>
+         <button onClick={()=>grantVip(30)} style={{...bP,flex:1,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11,padding:"7px 0"}}>+30 Ngày (Monthly)</button>
+       </div>
+     </div>}
+  </MBox>;
+}
+
+// ══════════════════════════════════════
 // COUPLE MODAL
 // ══════════════════════════════════════
 function CoupleModal({players,setPlayers,onClose}){
@@ -540,9 +671,9 @@ function CourtCard({court,elapsed,onScore,onAssign,next,readOnly}){
 function QRow({q,idx,courts,onAssign,onRemove,readOnly}){
   const free=courts.filter(c=>!c.match);
   const diff=Math.abs(teamElo(q.team1||[])-teamElo(q.team2||[]));
-  return <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,background:G.card,border:`1px solid ${q.custom?G.purple+"44":q.coupleMatch?G.pink+"44":G.border}`}}>
+  return <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",borderRadius:8,background:G.card,border:`1px solid ${q.challengeMatch?G.red+"44":q.custom?G.purple+"44":q.coupleMatch?G.pink+"44":G.border}`}}>
     <span style={{fontSize:10,fontWeight:700,color:G.muted,minWidth:14}}>#{idx+1}</span>
-    {q.custom&&<Chip label="✏️" color={G.purple} sm/>}{q.coupleMatch&&<Chip label="💑" color={G.pink} sm/>}
+    {q.custom&&!q.challengeMatch&&<Chip label="✏️" color={G.purple} sm/>}{q.coupleMatch&&<Chip label="💑" color={G.pink} sm/>}{q.challengeMatch&&<Chip label="⚔️" color={G.red} sm/>}
     <DBadge dtype={q.dtype}/>
     <div style={{flex:1}}>
       <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
@@ -622,15 +753,29 @@ function TVMode({courts,elapsed,queue,players,history,onClose}){
 // ══════════════════════════════════════
 // VIEWER MODE
 // ══════════════════════════════════════
-function ViewerMode({players,courts,history,queue,elapsed,events,onLogout}){
+function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,elapsed,events,activeEventId,onLogout,me,onShowProfile}){
   const [vtab,setVtab]=useState("courts");
+  const [showChal,setShowChal]=useState(false);
   const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k);
-  const VTABS=[{id:"courts",l:"🏟️ Sân Live"},{id:"leaderboard",l:"🏆 Xếp hạng"},{id:"queue",l:"⚔️ Queue"},{id:"history",l:"📋 Lịch sử"},{id:"analytics",l:"📈 Thống kê"}];
+  const VTABS=[{id:"courts",l:"🏟️ Sân Live"},{id:"leaderboard",l:"🏆 Xếp hạng"},{id:"queue",l:"⚔️ Queue"},{id:"events",l:"📅 Sự kiện"},{id:"history",l:"📋 Lịch sử"},{id:"analytics",l:"📈 Thống kê"}];
+  const myPlayer = players.find(p => p.id === me?.id) || me;
   return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
     <header style={{height:50,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${G.gold},${G.red})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>👁</div>
-        <div><div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1}}>LIVE VIEWER</div><div style={{fontSize:8,color:G.muted,letterSpacing:1.5}}>READ ONLY</div></div>
+        {myPlayer?.id?.startsWith("v_") ? (
+          <>
+            <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${G.gold},${G.red})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>👁</div>
+            <div><div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1}}>LIVE VIEWER</div><div style={{fontSize:8,color:G.muted,letterSpacing:1.5}}>READ ONLY</div></div>
+          </>
+        ) : (
+          <>
+            <div style={{width:32,height:32,borderRadius:9,background:`linear-gradient(135deg,${G.purple},${G.pink})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>👤</div>
+            <div>
+              <div style={{fontWeight:900,fontSize:14,color:"#fff",display:"flex",alignItems:"center",gap:6}}>{safe(myPlayer?.name)} {myPlayer?.membership&&<span style={{fontSize:10}}>💎</span>}</div>
+              <div style={{fontSize:9,color:G.gold,fontWeight:800}}>ELO: {myPlayer?.elo||0} · Rate: {kootoro(myPlayer,history)} · {myPlayer?.wins||0}W / {myPlayer?.gamesPlayed||0}G</div>
+            </div>
+          </>
+        )}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:6}}>
         <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
@@ -650,11 +795,55 @@ function ViewerMode({players,courts,history,queue,elapsed,events,onLogout}){
         {history.slice(0,6).length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:8}}>KẾT QUẢ GẦN ĐÂY</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{history.slice(0,6).map(h=><HCard key={h.id} h={h}/>)}</div></>}
       </div>}
-      {vtab==="leaderboard"&&<LeaderView ranked={ranked}/>}
+      {vtab==="leaderboard"&&<LeaderView ranked={ranked} onShowProfile={onShowProfile}/>}
       {vtab==="queue"&&<div>
-        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>⚔️ Queue</div>
+        {showChal&&<ViewerChallengeModal me={myPlayer} players={players} onChallenge={onChallenge} onClose={()=>setShowChal(false)}/>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚔️ Queue</div>
+          {!myPlayer?.id?.startsWith("v_") && myPlayer?.checkedIn && <button onClick={()=>setShowChal(true)} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:11,padding:"6px 12px"}}>⚔️ Thách đấu</button>}
+        </div>
+        
+        {pendingChallenges?.length>0&&<div style={{marginBottom:16}}>
+          <div style={{fontSize:11,color:G.gold,fontWeight:800,marginBottom:8}}>🔔 Đang chờ duyệt ({pendingChallenges.length})</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {pendingChallenges.map(c=>(
+              <div key={c.id} style={{padding:"8px 12px",borderRadius:8,background:G.gold+"15",border:`1px solid ${G.gold}44`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:12,fontWeight:700,color:G.text}}>
+                  <span style={{color:G.accent}}>{safe(c.challenger.name)}</span> + {safe(c.partner.name)} <span style={{color:G.dim,margin:"0 6px"}}>vs</span> <span style={{color:G.gold}}>{safe(c.opp1.name)}</span> + {safe(c.opp2.name)}
+                </div>
+                <div style={{fontSize:10,color:G.gold}}>⏳ Pending</div>
+              </div>
+            ))}
+          </div>
+        </div>}
+
+        <div style={{fontSize:11,color:G.text,fontWeight:800,marginBottom:8}}>📋 Sắp đấu ({queue.length})</div>
         {!queue.length?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"40px 0"}}>Chưa có trận</div>:
         <div style={{display:"flex",flexDirection:"column",gap:6}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} readOnly/>)}</div>}
+      </div>}
+      {vtab==="events"&&<div>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>📅 Sự kiện & Đặt chỗ</div>
+        {events.length===0?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"40px 0"}}>Chưa có sự kiện nào</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {events.map((ev,i)=>{
+            const isActive = ev.id === activeEventId;
+            return <div key={ev.id} style={{background:G.panel, border:`1px solid ${isActive?G.accent+"aa":G.border}`, borderRadius:12, padding:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:800,color:G.text}}>{ev.name}</div>
+                  <div style={{fontSize:11,color:G.muted,marginTop:4}}>📍 {ev.location||"Chưa có địa điểm"} · 🗓️ {ev.date}</div>
+                </div>
+                {isActive && <Chip label="🔴 ĐANG DIỄN RA" color={G.red}/>}
+              </div>
+              {ev.note && <div style={{fontSize:11,color:G.gold,marginBottom:12,padding:"6px 10px",background:G.gold+"12",borderRadius:6}}>💬 {ev.note}</div>}
+              
+              <div style={{borderTop:`1px solid ${G.border}`,paddingTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:10,color:G.dim}}>Nhấn Giữ chỗ để nhận mã QR cọc</div>
+                <button onClick={()=>{alert("Tính năng Đặt chỗ bằng QR đang trong thời gian hoàn thiện! Mức phí: Tuỳ sự kiện.");}} style={{...bP,background:`linear-gradient(135deg,${G.blue},${G.accent})`,padding:"6px 14px",fontSize:11}}>🎟 Giữ chỗ ngay</button>
+              </div>
+            </div>
+          })}
+        </div>}
       </div>}
       {vtab==="history"&&<HistoryTab history={history} events={events} players={players} readOnly/>}
       {vtab==="analytics"&&<AnalyticsView players={players} history={history} courts={courts}/>}
@@ -665,7 +854,7 @@ function ViewerMode({players,courts,history,queue,elapsed,events,onLogout}){
 // ══════════════════════════════════════
 // LEADERBOARD
 // ══════════════════════════════════════
-function LeaderView({ranked}){
+function LeaderView({ranked, onShowProfile}){
   return <div>
     <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Kootoro</div>
     {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:16,justifyContent:"center",alignItems:"flex-end"}}>
@@ -687,9 +876,9 @@ function LeaderView({ranked}){
       </div>
       {ranked.map((p,i)=>{
         const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0;
-        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:i<ranked.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
+        return <div key={p.id} onClick={()=>onShowProfile(p.id)} style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:i<ranked.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center",cursor:"pointer"}}>
           <div style={{fontSize:12,fontWeight:800,color:i<3?[G.gold,"#9ca3af","#b87333"][i]:G.muted}}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</div>
-          <div style={{fontSize:11,fontWeight:700,color:G.text,display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}{p.checkedIn&&<span style={{fontSize:8,color:G.accent}}>●</span>}</div>
+          <div style={{fontSize:11,fontWeight:700,color:G.text,display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.membership&&new Date(p.membership.expiresAt)>new Date()&&<span style={{fontSize:10}}>💎</span>}{p.coupleId&&<CBadge type={p.coupleType}/>}{p.checkedIn&&<span style={{fontSize:8,color:G.accent}}>●</span>}</div>
           <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
           <div style={{fontSize:12,fontWeight:900,color:SKILL_COLOR[p.skill]||G.muted}}>{p.elo||"?"}</div>
           <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
@@ -1084,7 +1273,7 @@ const TABS=[
   {id:"kiosk",l:"📲 Kiosk"},
 ];
 
-function DashTab({courts,players,queue,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent}){
+function DashTab({courts,players,queue,pendingChallenges,onApproveChallenge,onRejectChallenge,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent}){
   const ci=players.filter(p=>p?.checkedIn).length;
   return <div>
     {activeEvent&&<div style={{padding:"8px 14px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
@@ -1112,6 +1301,28 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
         <button onClick={autoAss} style={{...bP,fontSize:11,padding:"9px 12px"}}>▶ Auto gán</button>
       </div>
     </div>
+
+    {pendingChallenges?.length>0 && <div style={{marginBottom:12,padding:"10px 14px",borderRadius:11,background:G.gold+"15",border:`1px solid ${G.gold}44`}}>
+      <div style={{fontSize:11,color:G.gold,fontWeight:800,marginBottom:8}}>🔔 Lời Thách Đấu ({pendingChallenges.length})</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {pendingChallenges.map(c => (
+          <div key={c.id} style={{padding:"8px 12px",borderRadius:8,background:G.panel,border:`1px solid ${G.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:700,color:G.text}}>
+                 <span style={{color:G.accent}}>{safe(c.challenger.name)}</span> + {safe(c.partner.name)}
+                 <span style={{color:G.dim,margin:"0 6px"}}>vs</span>
+                 <span style={{color:G.gold}}>{safe(c.opp1.name)}</span> + {safe(c.opp2.name)}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:4}}>
+              <button onClick={()=>onApproveChallenge(c.id)} style={{...bP,padding:"5px 10px",fontSize:11,background:`linear-gradient(135deg,${G.accent},${G.blue})`}}>✓ Duyệt</button>
+              <button onClick={()=>onRejectChallenge(c.id)} style={{...bS,padding:"5px 10px",fontSize:11}}>✕ Từ chối</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>}
+
     <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginBottom:7}}>🏟️ 5 SÂN</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
       {courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign}/>)}
@@ -1125,7 +1336,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
   </div>;
 }
 
-function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR}){
+function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onShowProfile}){
   const [search,setSearch]=useState(""),[fG,setFG]=useState("all"),[fS,setFS]=useState("all");
   const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("kootoro");
   let list=[...players].filter(p=>p?.name);
@@ -1152,19 +1363,24 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR}){
       <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="kootoro">↓ Kootoro</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
     </div>
     <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
-      <div style={{display:"grid",gridTemplateColumns:"155px 48px 58px 88px 55px 44px 46px 68px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div>ACTION</div>
+      <div style={{display:"grid",gridTemplateColumns:"150px 40px 50px 80px 45px 40px 42px 64px 60px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
+        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div>MÃ</div><div>ACTION</div>
       </div>
       {list.map((p,i)=>{
         const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=Math.round(kootoro(p,history)*10)/10;
-        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"155px 48px 58px 88px 55px 44px 46px 68px 76px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
-          <div style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}</div>
+        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"150px 40px 50px 80px 45px 40px 42px 64px 60px 76px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
+          <div onClick={()=>onShowProfile(p.id)} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:3,cursor:"pointer"}}>
+            {safe(p.name)}
+            {p.membership&&new Date(p.membership.expiresAt)>new Date()&&<span style={{fontSize:10}}>💎</span>}
+            {p.coupleId&&<CBadge type={p.coupleType}/>}
+          </div>
           <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
           <div>{playing?<Chip label="🔴 Đấu" color={G.red}/>:p.checkedIn?<Chip label="⏳ Chờ" color={G.purple}/>:<Chip label="❌ Out" color={G.muted}/>}</div>
           <div style={{fontSize:12,fontWeight:900,color:SKILL_COLOR[p.skill]||G.muted}}>{p.elo||"?"}</div>
           <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
           <div style={{fontSize:10,color:wr>=50?G.accent:G.red,fontWeight:700}}>{wr}%</div>
           <div style={{fontSize:11,fontWeight:800,color:k>0?G.gold:k<0?G.red:G.muted}}>{k>0?"+":""}{k}</div>
+          <div style={{fontSize:10,fontFamily:"monospace",color:G.gold,letterSpacing:1,fontWeight:700}}>{p.viewerCode||"---"}</div>
           <div><button onClick={()=>onToggle(p.id)} style={{padding:"3px 8px",borderRadius:5,border:"none",cursor:"pointer",fontWeight:700,fontSize:9,background:p.checkedIn?G.accent+"22":`linear-gradient(135deg,${G.accent},${G.blue})`,color:p.checkedIn?G.accent:"#fff"}}>{p.checkedIn?"✅ IN":"Check In"}</button></div>
         </div>;
       })}
@@ -1219,6 +1435,7 @@ export default function App(){
   const [history,  setHistory]  = useState([]);
   const [courts,   setCourts]   = useState(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
   const [queue,    setQueue]    = useState([]);
+  const [pendingChallenges, setPendingChallenges] = useState([]);
   const [events,   setEvents]   = useState([]); // [{id,name,date,location,note,createdAt}]
   const [activeEventId, setActiveEventId] = useState(null);
   const [tab,      setTab]      = useState("dashboard");
@@ -1253,6 +1470,7 @@ export default function App(){
           startedAt: c.match&&c._startedAt ? Date.now()-(c._elapsed||0)*1000 : null
         })));
         if(active.queue)  setQueue(active.queue);
+        if(active.challenges) setPendingChallenges(active.challenges);
       }
       setLoading(false);
     })();
@@ -1268,7 +1486,7 @@ export default function App(){
         id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,dtype:p.dtype,
         coupleId:p.coupleId||null,coupleType:p.coupleType||null,
         gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,
-        lastPartners:p.lastPartners||[],createdAt:p.createdAt
+        lastPartners:p.lastPartners||[],createdAt:p.createdAt,viewerCode:p.viewerCode
       }))}),
       st.activeEventId
         ? DB.set(SKEY_EVENT(st.activeEventId), {history:st.history.slice(0,500)})
@@ -1281,17 +1499,18 @@ export default function App(){
           _elapsed: c.startedAt ? Math.floor((Date.now()-c.startedAt)/1000) : 0
         })),
         queue: st.queue,
+        challenges: st.pendingChallenges,
       }),
     ]);
     setSaving(false);
-  },[accounts,events,players,history,courts,queue,activeEventId]);
+  },[accounts,events,players,history,courts,queue,pendingChallenges,activeEventId]);
 
   // Auto-save sau mỗi thay đổi (debounce 800ms)
   useEffect(()=>{
     if(!me||me.role===ROLES.VIEWER) return;
     clearTimeout(saveRef.current);
     saveRef.current=setTimeout(()=>saveAll(),800);
-  },[players,history,accounts,events,courts,queue,activeEventId,me]);
+  },[players,history,accounts,events,courts,queue,pendingChallenges,activeEventId,me]);
 
   // Timer cho sân
   useEffect(()=>{
@@ -1313,9 +1532,10 @@ export default function App(){
     setActiveEventId(ev.id);
     setHistory([]); // reset history for new event
     setQueue([]);
+    setPendingChallenges([]);
     setPlayers(p=>p.map(x=>({...x,checkedIn:false}))); // reset checkins
     showT(`🗓️ Event "${ev.name}" đã tạo! Đang bắt đầu...`);
-    saveAll({events:newEvents, activeEventId:ev.id, history:[], queue:[]});
+    saveAll({events:newEvents, activeEventId:ev.id, history:[], queue:[], pendingChallenges:[]});
   };
   const editEvent = (ev) => {
     const newEvents = events.map(e=>e.id===ev.id?ev:e);
@@ -1329,14 +1549,15 @@ export default function App(){
     setActiveEventId(null);
     setHistory([]);
     setQueue([]);
+    setPendingChallenges([]);
     setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
-    saveAll({activeEventId:null, history:[], queue:[]});
+    saveAll({activeEventId:null, history:[], queue:[], pendingChallenges:[]});
   };
 
   const handleRegister=data=>{
     setPlayers(prev=>{
       const ex=prev.find(p=>p.id===data.id);
-      let upd=ex?prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true}:p):[...prev,{...data,checkedIn:true}];
+      let upd=ex?prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true,viewerCode:p.viewerCode||genCode()}:p):[...prev,{...data,checkedIn:true,viewerCode:data.viewerCode||genCode()}];
       if(data.coupleWithId&&data.coupleId) upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
       return upd;
     });
@@ -1373,6 +1594,22 @@ export default function App(){
     setQueue(q);showT("Đã gán ▶");
   };
 
+  const handleChallenge = (cData) => {
+    setPendingChallenges(prev => [...prev, {id:uid(), ...cData, requestedAt:Date.now()}]);
+    showT("Đã gửi thách đấu đến Host! ⏳");
+  };
+  const handleApproveChallenge = id => {
+    const c = pendingChallenges.find(x => x.id === id);
+    if(!c) return;
+    setQueue(prev => [...prev, {team1:[c.challenger, c.partner], team2:[c.opp1, c.opp2], dtype:"any", custom:true, challengeMatch:true}]);
+    setPendingChallenges(prev => prev.filter(x => x.id !== id));
+    showT("Đã duyệt thách đấu! ⚔️");
+  };
+  const handleRejectChallenge = id => {
+    setPendingChallenges(prev => prev.filter(x => x.id !== id));
+    showT("Đã từ chối thách đấu.");
+  };
+
   const handleScore=(w,sw,sl)=>{
     if(!activeEvent){showT("Tạo Event trước khi nhập điểm!","warn");return;}
     const court=courts.find(c=>c.id===scoreTarget);if(!court?.match)return;
@@ -1400,7 +1637,7 @@ export default function App(){
 
   const toggleCI=id=>{
     const p=players.find(p=>p.id===id);if(!p)return;
-    setPlayers(pp=>pp.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn}:x));
+    setPlayers(pp=>pp.map(x=>x.id===id?{...x,checkedIn:!x.checkedIn,viewerCode:x.viewerCode||genCode()}:x));
     showT(`${safe(p.name)} ${p.checkedIn?"rời session":"check in ✅"}`);
   };
 
@@ -1408,10 +1645,10 @@ export default function App(){
   const isSA=me?.role===ROLES.SA;
   const scoreMatch=scoreTarget?courts.find(c=>c.id===scoreTarget)?.match:null;
 
-  if(!me) return <><style>{CSS}</style><Login accounts={accounts} onLogin={setMe} loading={loading}/></>;
+  if(!me) return <><style>{CSS}</style><Login accounts={accounts} players={players} onLogin={setMe} loading={loading}/></>;
   if(me.role===ROLES.VIEWER) return <><style>{CSS}</style>
     {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
-    <ViewerMode players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} onLogout={()=>setMe(null)}/></>;
+    <ViewerMode players={players} courts={courts} history={history} queue={queue} pendingChallenges={pendingChallenges} onChallenge={handleChallenge} elapsed={elapsed} events={events} activeEventId={activeEventId} onLogout={()=>setMe(null)} me={me} onShowProfile={setProfileTarget}/></>;
 
   return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
     <style>{CSS}</style>
@@ -1425,6 +1662,7 @@ export default function App(){
     {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
     {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
     {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
+    {profileTarget&&<PlayerProfileModal p={players.find(x=>x.id===profileTarget)} history={history} onClose={()=>setProfileTarget(null)} isSA={isSA} onUpdatePlayer={px=>setPlayers(prev=>prev.map(x=>x.id===px.id?px:x))} toast={showT}/>}
 
     {/* HEADER */}
     <header style={{height:54,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
@@ -1473,14 +1711,14 @@ export default function App(){
 
     {/* MAIN CONTENT */}
     <main style={{padding:"12px 14px",maxWidth:1800,margin:"0 auto"}}>
-      {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent}/>}
+      {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} pendingChallenges={pendingChallenges} onApproveChallenge={handleApproveChallenge} onRejectChallenge={handleRejectChallenge} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent}/>}
       {tab==="courts"     &&<div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign}/>)}</div>
         {queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE</div><div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={assign}/>)}</div></>}
       </div>}
-      {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")}/>}
+      {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onShowProfile={setProfileTarget}/>}
       {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
-      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)}/>}
+      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)} onShowProfile={setProfileTarget}/>}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
