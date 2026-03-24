@@ -149,6 +149,45 @@ const GAME_MODES = [
 const NCOURTS = 5;
 const ROLES = {SA:"super_admin", HOST:"host", VIEWER:"viewer"};
 
+// ── TIER / LADDER SYSTEM
+const TIERS = [
+  {id:"bronze",  label:"Bronze",    min:-999, max:100, color:"#b87333", bg:"#6b3c1a22", icon:"🥉", rank:1},
+  {id:"silver",  label:"Silver",    min:100,  max:300, color:"#9ca3af", bg:"#6b728022", icon:"🥈", rank:2},
+  {id:"gold",    label:"Gold",      min:300,  max:600, color:"#f59e0b", bg:"#f59e0b22", icon:"🥇", rank:3},
+  {id:"platinum",label:"Platinum",  min:600,  max:1000,color:"#38bdf8", bg:"#38bdf822", icon:"💎", rank:4},
+  {id:"diamond", label:"Diamond",   min:1000, max:1500,color:"#a78bfa", bg:"#a78bfa22", icon:"💍", rank:5},
+  {id:"elite",   label:"Elite",     min:1500, max:9999,color:"#f43f5e", bg:"#f43f5e22", icon:"👑", rank:6},
+];
+const getTier = (k) => TIERS.find(t => k >= t.min && k < t.max) || TIERS[0];
+const tierProgress = (k) => { 
+  const t = getTier(k); 
+  const range = t.max - t.min; 
+  if (range === 0) return 100;
+  return Math.min(100, Math.max(0, Math.round((k - t.min) / range * 100))); 
+};
+
+// ── BADGES & AVATARS
+const AVATAR_COLORS = ["#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#f43f5e","#8b5cf6","#06b6d4"];
+const getAvatarColor = (name) => AVATAR_COLORS[(name||"").charCodeAt(0) % AVATAR_COLORS.length];
+const playerBadges = (p, history) => {
+  const badges = [];
+  const recent = (history||[]).filter(h=>[...(h.team1||[]),...(h.team2||[])].some(x=>x?.id===p.id)).slice(-10);
+  const wins = recent.filter(h=>{const inT1=(h.team1||[]).some(x=>x?.id===p.id);return (inT1&&h.winner===1)||(!inT1&&h.winner===2);}).length;
+  if(wins >= 3) badges.push({icon:"🔥", label:"Hot"});
+  if((p.gamesPlayed||0) >= 10) badges.push({icon:"🏃", label:"Active"});
+  if((p.kootoro||0) > 50) badges.push({icon:"🧠", label:"Smart"});
+  if(p.membership?.type) badges.push({icon:"💎", label:"Member"});
+  return badges;
+};
+
+function PlayerAvatar({name, size=32, color, style={}}){
+  const bg = color || getAvatarColor(name);
+  return <div style={{width:size, height:size, borderRadius:"50%", background:bg, display:"flex", alignItems:"center", justifyItems:"center", justifyContent:"center", fontWeight:900, color:"#fff", fontSize:size*0.4, textTransform:"uppercase", border:"2px solid #ffffff22", ...style}}>
+    {(name||"?").split(" ").pop()[0]}
+  </div>;
+}
+
+
 // ── UTILS
 const uid      = () => Math.random().toString(36).slice(2,9).toUpperCase();
 const rng      = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
@@ -181,13 +220,18 @@ const validScore = (a,b) => { if(isNaN(a)||isNaN(b)||a<0||b<0||a===b) return fal
 const winner = (a,b) => validScore(a,b)?(a>b?1:2):null;
 
 // ── MATCH GEN
-function genMatch(pool, history, dtype) {
+function genMatch(pool, history, dtype, settings) {
+  const algo = settings || { preventDupTeam: true, penaltyDupOpp: true, balanceSkill: true, balanceElo: true, prioritizeWait: true };
   let cands=[...pool].filter(p=>p?.id&&p?.name);
   if(dtype==="male") cands=cands.filter(p=>p.gender==="M");
   else if(dtype==="female") cands=cands.filter(p=>p.gender==="F");
   if(cands.length<4) return null;
-  const pri=p=>history.filter(h=>h?.team1&&h?.team2&&[...h.team1,...h.team2].some(x=>x?.id===p.id)).length+(p.gamesPlayed||0)*0.5;
-  const top=[...cands].sort((a,b)=>pri(a)-pri(b)).slice(0,Math.min(cands.length,20));
+  const pri=p=>{
+    let score = history.filter(h=>h?.team1&&h?.team2&&[...h.team1,...h.team2].some(x=>x?.id===p.id)).length+(p.gamesPlayed||0)*0.5;
+    if(algo.prioritizeWait && p._waitScore) score -= p._waitScore||0;
+    return score;
+  };
+  const top=[...cands].sort((a,b)=>pri(a)-pri(b)).slice(0,Math.min(cands.length,algo.prioritizeWait?30:20));
   let best=null, bs=Infinity;
   for(let i=0;i<800;i++){
     const sh=[...top].sort(()=>Math.random()-0.5), [a,b,c,d]=sh;
@@ -195,8 +239,15 @@ function genMatch(pool, history, dtype) {
     if(dtype==="male"&&[a,b,c,d].some(x=>x.gender!=="M")) continue;
     if(dtype==="female"&&[a,b,c,d].some(x=>x.gender!=="F")) continue;
     if(dtype==="mixed"&&!(a.gender!==b.gender&&c.gender!==d.gender)) continue;
-    const rep=(a.lastPartners?.includes(b.id)?280:0)+(c.lastPartners?.includes(d.id)?280:0);
-    const diff=Math.abs(teamElo([a,b])-teamElo([c,d]));
+    
+    let rep = 0;
+    if(algo.preventDupTeam) rep += (a.lastPartners?.includes(b.id)?280:0)+(c.lastPartners?.includes(d.id)?280:0);
+    // penaltyDupOpp logic placeholder
+    if(!algo.preventDupTeam) rep = 0;
+
+    let diff=Math.abs(teamElo([a,b])-teamElo([c,d]));
+    if(!algo.balanceElo && !algo.balanceSkill) diff = 0;
+    
     const sc=rep+(diff>40?diff*2.5:diff*0.4)+(pri(a)+pri(b)+pri(c)+pri(d))*1.2;
     if(sc<bs){bs=sc;best={team1:[a,b],team2:[c,d],diff:Math.round(diff),dtype};}
   }
@@ -314,6 +365,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
   const [numCourts,setNumCourts]=useState(event?.numCourts||currentNumCourts||5);
   const [maxPlayers,setMaxPlayers]=useState(event?.maxPlayers||0);
   const [feePerPerson,setFeePerPerson]=useState(event?.feePerPerson||0);
+  const [updateDUPR,setUpdateDUPR]=useState(event?.updateDUPR||false);
 
   const totalFee=(Number(courtFee)||0)+(Number(extraFee)||0);
   // Ưu tiên: feePerPerson nhập tay > tính từ tổng/số người > 0
@@ -330,7 +382,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
       maxPlayers:Number(maxPlayers)||0,
       feePerPerson:Number(feePerPerson)||0,
       courtFee:Number(courtFee)||0,extraFee:Number(extraFee)||0,
-      feeNote:feeNote.trim(),qrUrl:qrUrl,
+      feeNote:feeNote.trim(),qrUrl:qrUrl, updateDUPR,
       id:event?.id||`ev_${uid()}`,
       createdAt:event?.createdAt||new Date().toISOString(),
     });
@@ -392,6 +444,13 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
         </button>;})}
       </div>
     </Fld>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 14px",borderRadius:8,background:updateDUPR?"#1e3a8a20":G.card,border:`1px solid ${updateDUPR?"#3b82f6":"#172840"}`,cursor:"pointer"}} onClick={()=>setUpdateDUPR(!updateDUPR)}>
+      <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${updateDUPR?"#3b82f6":"#4a6480"}`,background:updateDUPR?"#3b82f6":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{updateDUPR&&<div style={{width:10,height:10,background:"#fff",borderRadius:2}}/>}</div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:12,fontWeight:800,color:updateDUPR?"#3b82f6":G.text}}>Cập nhật điểm DUPR</div>
+        <div style={{fontSize:10,color:G.muted,marginTop:2}}>Tự động đẩy kết quả lên hệ thống DUPR toàn cầu</div>
+      </div>
+    </div>
     <div style={{borderTop:`1px solid ${G.border}`,paddingTop:14,marginTop:2}}>
       <div style={{fontSize:10,fontWeight:800,color:G.gold,marginBottom:10,letterSpacing:1}}>💰 CHI PHÍ BUỔI CHƠI</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -459,7 +518,7 @@ function EventModal({event, onSave, onClose, isNew, currentNumCourts}){
 // ══════════════════════════════════════
 // LOGIN
 // ══════════════════════════════════════
-function Login({accounts,onLogin,loading}){
+function Login({accounts,players,onLogin,loading}){
   const [mode,setMode]=useState("choose");
   const [user,setUser]=useState(""),[pass,setPass]=useState(""),[code,setCode]=useState(""),[err,setErr]=useState("");
   const [checking,setChecking]=useState(false);
@@ -492,17 +551,28 @@ function Login({accounts,onLogin,loading}){
       const fresh=await window.STORE?.load();
       const freshCode=(fresh?.accounts?.viewerCode||"").toUpperCase();
       const localCode=(accounts?.viewerCode||"PICKLE").toUpperCase();
-      if(inputCode===freshCode||inputCode===localCode||inputCode==="PICKLE"){
+      const freshPlayers=fresh?.players || players || [];
+      const matchPlayer = freshPlayers.find(p => p.viewerCode && p.viewerCode.toUpperCase() === inputCode);
+      
+      if(matchPlayer) {
+        onLogin({id:matchPlayer.id, name:matchPlayer.name, role:ROLES.VIEWER, password:"", isPlayer:true});
+      }
+      else if(inputCode===freshCode||inputCode===localCode||inputCode==="PICKLE"){
         onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""});
       } else {
         setErr("Mã truy cập không đúng");
       }
     }catch(e){
       // Fallback local
-      const localCode=(accounts?.viewerCode||"PICKLE").toUpperCase();
-      inputCode===localCode
-        ?onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""})
-        :setErr("Mã truy cập không đúng");
+      const matchPlayer = (players||[]).find(p => p.viewerCode && p.viewerCode.toUpperCase() === inputCode);
+      if(matchPlayer) {
+        onLogin({id:matchPlayer.id, name:matchPlayer.name, role:ROLES.VIEWER, password:"", isPlayer:true});
+      } else {
+        const localCode=(accounts?.viewerCode||"PICKLE").toUpperCase();
+        inputCode===localCode
+          ?onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""})
+          :setErr("Mã truy cập không đúng");
+      }
     }
     setChecking(false);
   };
@@ -516,7 +586,7 @@ function Login({accounts,onLogin,loading}){
       {mode==="choose"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
         <button onClick={()=>{setMode("admin");setErr("");}} style={{...bP,padding:"16px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}><span>🎮</span> Đăng nhập Admin / Host</button>
         <button onClick={()=>{setMode("viewer");setErr("");}} style={{...bS,padding:"16px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10,border:`1px solid ${G.gold}55`,color:G.gold}}><span>👁</span> Xem điểm & Bảng xếp hạng</button>
-        <div style={{textAlign:"center",padding:"10px",borderRadius:8,background:G.panel,border:`1px solid ${G.border}`,fontSize:10,color:G.dim}}>💡 Khán giả dùng mã truy cập do Host cung cấp</div>
+        <div style={{textAlign:"center",padding:"10px",borderRadius:8,background:G.panel,border:`1px solid ${G.border}`,fontSize:10,color:G.dim}}>📱 Người chơi dùng mã cá nhân sau khi check-in · Khán giả dùng mã do Host cấp</div>
       </div>}
       {mode==="admin"&&<div style={{background:G.panel,borderRadius:16,padding:24,border:`1px solid ${G.border}`}}>
         <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:16}}>🎮 Đăng nhập quản trị</div>
@@ -530,9 +600,10 @@ function Login({accounts,onLogin,loading}){
         <div style={{marginTop:12,padding:"8px 12px",borderRadius:8,background:G.card,fontSize:10,color:G.dim}}>Mặc định: <span style={{color:G.accent}}>Super Admin</span> / <span style={{color:G.accent}}>admin2024</span></div>
       </div>}
       {mode==="viewer"&&<div style={{background:G.panel,borderRadius:16,padding:24,border:`1px solid ${G.gold}33`}}>
-        <div style={{fontSize:14,fontWeight:800,color:G.gold,marginBottom:16}}>👁 Xem trực tiếp</div>
+        <div style={{fontSize:14,fontWeight:800,color:G.gold,marginBottom:4}}>👁 Xem trực tiếp</div>
+        <div style={{fontSize:10,color:G.muted,marginBottom:16}}>Người chơi: dùng mã cá nhân sau check-in · Khán giả: dùng mã chung do Host cấp</div>
         <Fld label="MÃ TRUY CẬP">
-          <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr("");}} placeholder="VD: AB12CD" maxLength={8}
+          <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr("");}} placeholder="VD: A4K9" maxLength={8}
             style={{...iS,textAlign:"center",fontSize:24,fontWeight:900,letterSpacing:8,color:G.gold}} onKeyDown={e=>e.key==="Enter"&&tryViewer()}/>
         </Fld>
         {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,background:G.red+"12"}}>{err}</div>}
@@ -546,10 +617,42 @@ function Login({accounts,onLogin,loading}){
 }
 
 // ══════════════════════════════════════
+// ALGO SETTINGS (THUẬT TOÁN)
+// ══════════════════════════════════════
+function AlgoSettings({accounts, setAccounts, onSaveAccounts}){
+  const algo = accounts.algo || { preventDupTeam: true, penaltyDupOpp: true, balanceSkill: true, balanceElo: true, prioritizeWait: true };
+  const toggle = (k) => {
+    const newAccounts = {...accounts, algo: {...algo, [k]: !algo[k]}};
+    setAccounts(newAccounts);
+    onSaveAccounts(newAccounts);
+  };
+  const Item = ({id, label, desc}) => (
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 0", borderBottom:`1px solid ${G.border}66`}}>
+      <div style={{flex:1, paddingRight:16}}>
+        <div style={{fontSize:13, fontWeight:700, color:G.text}}>{label}</div>
+        <div style={{fontSize:11, color:G.muted, marginTop:2}}>{desc}</div>
+      </div>
+      <div onClick={()=>toggle(id)} style={{width:44, height:24, borderRadius:12, background:algo[id]?G.accent:G.card, border:`2px solid ${algo[id]?G.accent:G.border}`, position:"relative", cursor:"pointer", transition:"0.2s"}}>
+        <div style={{width:16, height:16, borderRadius:8, background:"#fff", position:"absolute", top:2, left:algo[id]?22:2, transition:"0.2s"}}/>
+      </div>
+    </div>
+  );
+  return <div>
+    <div style={{fontSize:15, fontWeight:800, color:G.text, marginBottom:8}}>Cài đặt thuật toán</div>
+    <div style={{fontSize:11, color:G.dim, marginBottom:16}}>Bật/tắt tính năng ghép trận và điều chỉnh trọng số.</div>
+    <Item id="preventDupTeam" label="Ngăn lặp đồng đội" desc="Chặn người chơi làm đồng đội nếu đã cùng đội trong các trận gần đây."/>
+    <Item id="penaltyDupOpp" label="Phạt đối thủ lặp lại" desc="Phạt khi cùng đối thủ gặp lại nhau quá sớm."/>
+    <Item id="balanceSkill" label="Cân bằng trình độ" desc="Cân bằng đội theo trình độ (2.0 - 5.0) để tạo trận công bằng."/>
+    <Item id="balanceElo" label="Cân bằng ELO" desc="Dùng xếp hạng ELO để cân bằng sức mạnh đội ngoài trình độ."/>
+    <Item id="prioritizeWait" label="Ưu tiên chờ lâu" desc="Ưu tiên người chơi đã chờ lâu hơn trong hàng đợi."/>
+  </div>;
+}
+
+// ══════════════════════════════════════
 // ADMIN MODAL
 // ══════════════════════════════════════
 function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourts,onSaveAccounts}){
-  const [tab,setTab]=useState("viewer");
+  const [tab,setTab]=useState("algo");
   const [nm,setNm]=useState(""),[pw,setPw]=useState(""),[err,setErr]=useState("");
   const isSA=me?.role===ROLES.SA;
   const addHost=()=>{
@@ -575,10 +678,11 @@ function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourt
     onSaveAccounts(newAccounts);
     toast(`Mã viewer mới: ${c} 🔄`);
   };
-  return <MBox title="⚙️ Cài đặt" sub="Hosts · Viewer · Sân · Mật khẩu" onClose={onClose} w={560}>
-    <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:`1px solid ${G.border}`,paddingBottom:8,flexWrap:"wrap"}}>
-      {[{id:"viewer",l:"👁 Viewer"},{id:"courts",l:"🏟️ Số sân"},{id:"hosts",l:"🎮 Hosts"},{id:"pass",l:"🔐 Mật khẩu"}].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===t.id?G.accent+"22":"transparent",color:tab===t.id?G.accent:G.muted,borderBottom:tab===t.id?`2px solid ${G.accent}`:"2px solid transparent"}}>{t.l}</button>)}
+  return <MBox title="⚙️ Cài đặt" sub="Thuật toán · Hosts · Viewer" onClose={onClose} w={560}>
+    <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:`1px solid ${G.border}`,paddingBottom:8,flexWrap:"wrap",overflowX:"auto"}}>
+      {[{id:"algo",l:"⚙️ Thuật toán"},{id:"viewer",l:"👁 Viewer"},{id:"courts",l:"🏟️ Số sân"},{id:"hosts",l:"🎮 Hosts"},{id:"pass",l:"🔐 Mật khẩu"}].map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===t.id?G.accent+"22":"transparent",color:tab===t.id?G.accent:G.muted,borderBottom:tab===t.id?`2px solid ${G.accent}`:"2px solid transparent"}}>{t.l}</button>)}
     </div>
+    {tab==="algo"&&<AlgoSettings accounts={accounts} setAccounts={setAccounts} onSaveAccounts={onSaveAccounts}/>}
     {tab==="viewer"&&<>
       <div style={{textAlign:"center",padding:"16px 0"}}>
         <div style={{fontSize:11,color:G.muted,marginBottom:12}}>Chia sẻ mã này cho khán giả xem live</div>
@@ -652,11 +756,6 @@ function ScoreModal({match,onConfirm,onClose}){
         <div style={{fontSize:11,color:G.accent,fontWeight:700,marginBottom:5}}>{t1n}</div>
         <input type="number" min="0" max="99" value={s1} onChange={e=>setS1(e.target.value)} placeholder="0" style={{...iS,fontSize:30,fontWeight:900,textAlign:"center",padding:"10px 6px",color:ok&&wi===1?G.accent:G.text,border:`2px solid ${ok&&wi===1?G.accent:G.border}`}}/>
       </div>
-      <div style={{fontSize:16,fontWeight:800,color:G.dim,marginTop:14,textAlign:"center"}}>:</div>
-      <div style={{textAlign:"center"}}>
-        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:5}}>{t2n}</div>
-        <input type="number" min="0" max="99" value={s2} onChange={e=>setS2(e.target.value)} placeholder="0" style={{...iS,fontSize:30,fontWeight:900,textAlign:"center",padding:"10px 6px",color:ok&&wi===2?G.gold:G.text,border:`2px solid ${ok&&wi===2?G.gold:G.border}`}}/>
-      </div>
     </div>
     {deuced&&<div style={{textAlign:"center",padding:"5px",borderRadius:7,background:G.purple+"18",color:G.purple,fontSize:11,fontWeight:700,marginBottom:10}}>🔥 DEUCE</div>}
     <div style={{textAlign:"center",padding:"7px",borderRadius:7,background:ok?G.accent+"12":G.card,border:`1px solid ${ok?G.accent+"44":G.border}`,color:ok?G.accent:G.muted,fontSize:11,marginBottom:12}}>{hint()}</div>
@@ -672,29 +771,70 @@ function ScoreModal({match,onConfirm,onClose}){
   </MBox>;
 }
 
-// ══════════════════════════════════════
-// EDIT PLAYER MODAL
-// ══════════════════════════════════════
-function EditPlayerModal({player,onSave,onClose,toast}){
+function EditPlayerModal({player,onSave,onClose,toast,history}) {
   const [f,setF]=useState({name:player.name||"",gender:player.gender||"M",skill:player.skill||"3.0",
     phone:player.phone||"",note:player.note||"",dtype:player.dtype||"any",
     paid:player.paid||false,payMethod:player.payMethod||"transfer",
     paidAmount:player.paidAmount||0,totalSpent:player.totalSpent||0,
-    monthSpent:player.monthSpent||0,eventCount:player.eventCount||0
+    monthSpent:player.monthSpent||0,eventCount:player.eventCount||0,
+    avatarColor:player.avatarColor||null,
+    membership:player.membership||{type:null,expiresAt:null}
   });
   const [showReset,setShowReset]=useState(false);
   const sf=(k,v)=>setF(prev=>({...prev,[k]:v}));
+  
+  // Calculate history
+  const myMatches = (history||[]).filter(m => [...(m.team1||[]), ...(m.team2||[])].some(p => p?.id === player.id)).slice(0, 15);
+  
   const save=()=>{if(!safe(f.name).trim()){toast("Nhập tên","warn");return;}onSave({...player,...f,name:f.name.trim()});};
-  return <MBox title={`✏️ Sửa: ${player.name}`} onClose={onClose} w={480}>
-    <Fld label="TÊN"><input value={f.name} onChange={e=>sf("name",e.target.value)} style={iS} autoFocus/></Fld>
-    <Fld label="GIỚI TÍNH"><div style={{display:"flex",gap:8}}>{[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=><button key={g.v} onClick={()=>sf("gender",g.v)} style={{flex:1,padding:"10px 0",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,border:`2px solid ${f.gender===g.v?g.c:G.border}`,background:f.gender===g.v?g.c+"25":"transparent",color:f.gender===g.v?g.c:G.muted}}>{g.l}</button>)}</div></Fld>
-    <Fld label="TRÌNH ĐỘ"><div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>{SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=f.skill===s;return <button key={s} onClick={()=>sf("skill",s)} style={{padding:"8px 2px",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}>{s}</button>;})}</div></Fld>
-    <Fld label="KIỂU ĐÔI"><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>{DTYPE_OPT.map(d=>{const sel=f.dtype===d.val;return <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"6px 2px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>;})}</div></Fld>
-    <Fld label="SỐ ĐIỆN THOẠI"><input value={f.phone} onChange={e=>sf("phone",e.target.value)} placeholder="0901234567..." style={iS}/></Fld>
+  
+  return <MBox title={`✏️ Hồ sơ: ${player.name}`} onClose={onClose} w={500}>
+    <div style={{display:"flex",gap:15,marginBottom:15,alignItems:"center"}}>
+      <PlayerAvatar name={f.name} size={64} color={f.avatarColor} style={{border:`3px solid ${G.accent}44`}} />
+      <div style={{flex:1}}>
+        <Fld label="TÊN HIỂN THỊ"><input value={f.name} onChange={e=>sf("name",e.target.value)} style={iS} autoFocus/></Fld>
+        <div style={{display:"flex",gap:10,marginTop:5}}>
+          <div style={{fontSize:10,color:G.muted}}>Màu đại diện:</div>
+          <div style={{display:"flex",gap:4}}>
+            {AVATAR_COLORS.map(c => <div key={c} onClick={()=>sf("avatarColor", c)} style={{width:16,height:16,borderRadius:"50%",background:c,cursor:"pointer",border:f.avatarColor===c?`2px solid #fff`:`1px solid #00000033` }} />)}
+            <div onClick={()=>sf("avatarColor", null)} style={{fontSize:10,cursor:"pointer",color:G.blue}}>Mặc định</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Fld label="GIỚI TÍNH"><div style={{display:"flex",gap:8}}>{[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=><button key={g.v} onClick={()=>sf("gender",g.v)} style={{flex:1,padding:"10px 0",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,border:`2px solid ${f.gender===g.v?g.c:G.border}`,background:f.gender===g.v?g.c+"25":"transparent",color:f.gender===g.v?g.c:G.muted}}>{g.l}</button>)}</div></Fld>
+      <Fld label="TRÌNH ĐỘ"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>{SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=f.skill===s;return <button key={s} onClick={()=>sf("skill",s)} style={{padding:"8px 2px",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}>{s}</button>;})}</div></Fld>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Fld label="KIỂU ĐÔI"><div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:5}}>{DTYPE_OPT.map(d=>{const sel=f.dtype===d.val;return <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"6px 2px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>;})}</div></Fld>
+      <Fld label="SỐ ĐIỆN THOẠI"><input value={f.phone} onChange={e=>sf("phone",e.target.value)} placeholder="0901234567..." style={iS}/></Fld>
+    </div>
+
+    {/* Membership section */}
+    <div style={{background:G.gold+"11", border:`1px solid ${G.gold}33`, borderRadius:12, padding:12, marginBottom:15}}>
+      <div style={{fontSize:11, fontWeight:800, color:G.gold, marginBottom:10, display:"flex", alignItems:"center", gap:5}}>💎 HỘI VIÊM (MEMBERSHIP)</div>
+      <div style={{display:"flex", gap:10}}>
+        {["weekly", "monthly"].map(t => {
+          const sel = f.membership?.type === t;
+          return <button key={t} onClick={() => {
+            const days = t==='weekly'?7:30;
+            const exp = new Date(Date.now() + days*24*60*60*1000).toISOString();
+            sf("membership", {type:t, expiresAt:exp});
+          }} style={{flex:1, padding:"10px 0", borderRadius:8, background:sel?G.gold+"33":"transparent", border:`2px solid ${sel?G.gold:G.border}`, color:sel?G.gold:G.muted, fontWeight:700, cursor:"pointer", fontSize:12}}>
+            {t==='weekly'?'Tuần (7 ngày)':'Tháng (30 ngày)'}
+          </button>;
+        })}
+        <button onClick={()=>sf("membership", {type:null, expiresAt:null})} style={{padding:"0 12px", borderRadius:8, border:`1px solid ${G.border}`, background:"transparent", color:G.muted, fontSize:10, cursor:"pointer"}}>Huỷ</button>
+      </div>
+      {f.membership?.type && <div style={{fontSize:10, color:G.gold, marginTop:8, fontWeight:700}}>Hết hạn: {new Date(f.membership.expiresAt).toLocaleDateString("vi-VN")}</div>}
+    </div>
 
     {/* Payment section */}
-    <div style={{borderTop:`1px solid ${G.border}`,paddingTop:12,marginTop:4,marginBottom:12}}>
-      <div style={{fontSize:10,fontWeight:800,color:G.gold,marginBottom:10,letterSpacing:1}}>💰 CHI PHÍ & THANH TOÁN</div>
+    <div style={{borderBottom:`1px solid ${G.border}`,paddingBottom:12,marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:800,color:G.accent,marginBottom:10,letterSpacing:1}}>💰 THANH TOÁN BUỔI NÀY</div>
       <Fld label="TRẠNG THÁI">
         <div style={{display:"flex",gap:7}}>
           {[{v:false,l:"⏳ Chưa TT",c:G.gold},{v:true,l:"✅ Đã TT",c:"#34d399"}].map(o=>
@@ -705,31 +845,37 @@ function EditPlayerModal({player,onSave,onClose,toast}){
                 color:f.paid===o.v?o.c:G.muted}}>{o.l}</button>)}
         </div>
       </Fld>
-      <Fld label="HÌNH THỨC">
-        <div style={{display:"flex",gap:6}}>
-          {[{v:"transfer",l:"🏦 Chuyển khoản"},{v:"cash",l:"💵 Tiền mặt"},{v:"free",l:"🎁 Miễn phí"}].map(m=>
-            <button key={m.v} onClick={()=>sf("payMethod",m.v)}
-              style={{flex:1,padding:"7px 4px",borderRadius:8,fontSize:10,fontWeight:700,cursor:"pointer",
-                border:`2px solid ${f.payMethod===m.v?G.accent:G.border}`,
-                background:f.payMethod===m.v?G.accent+"18":"transparent",
-                color:f.payMethod===m.v?G.accent:G.muted}}>{m.l}</button>)}
-        </div>
-      </Fld>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <Fld label="SỐ TIỀN ĐÃ TT (buổi này)">
-          <input type="number" value={f.paidAmount||""} onChange={e=>sf("paidAmount",Number(e.target.value))} placeholder="0" style={iS}/>
-        </Fld>
-        <Fld label="TỔNG ĐÃ CHI (tất cả event)">
-          <input type="number" value={f.totalSpent||""} onChange={e=>sf("totalSpent",Number(e.target.value))} placeholder="0" style={iS}/>
-        </Fld>
-      </div>
     </div>
 
-    <Fld label="GHI CHÚ"><input value={f.note} onChange={e=>sf("note",e.target.value)} placeholder="VD: hay đến muộn, ưu tiên sân 2..." style={iS}/></Fld>
+    {/* Match History */}
+    <Fld label="📋 LỊCH SỬ TRẬN GẦN ĐÂY">
+      <div style={{maxHeight:150, overflowY:"auto", background:G.panel, borderRadius:10, border:`1px solid ${G.border}`}} className="hscroll">
+        {!myMatches.length ? <div style={{padding:20, textAlign:"center", fontSize:11, color:G.dim}}>Chưa có trận đấu nào</div> :
+          myMatches.map(m => {
+            const inT1 = (m.team1||[]).some(p => p?.id === player.id);
+            const myTeam = inT1 ? m.team1 : m.team2;
+            const oppTeam = inT1 ? m.team2 : m.team1;
+            const partner = myTeam.find(p => p?.id !== player.id);
+            const win = (inT1 && m.winner === 1) || (!inT1 && m.winner === 2);
+            return <div key={m.id} style={{padding:"8px 12px", borderBottom:`1px solid ${G.border}33`, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <span style={{fontSize:10, fontWeight:900, color:win?G.accent:G.red}}>{win?'W':'L'}</span>
+                <div style={{fontSize:11}}>
+                  {partner ? <span style={{color:G.muted}}>Cùng <b style={{color:G.text}}>{safe(partner.name)}</b></span> : <span style={{color:G.muted}}>Đánh đơn</span>}
+                  <div style={{fontSize:9, color:G.dim}}>Gặp {oppTeam.map(p=>safe(p?.name)).join(" & ")}</div>
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:11, fontWeight:900, color:m.delta>0?G.gold:G.red}}>{m.delta>0?'+':''}{m.delta}</div>
+                <div style={{fontSize:9, color:G.dim}}>{m.score1}-{m.score2}</div>
+              </div>
+            </div>;
+          })
+        }
+      </div>
+    </Fld>
 
-    {/* Stats */}
-    <div style={{padding:"10px 12px",borderRadius:9,background:G.card,border:`1px solid ${G.border}`,marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div style={{padding:"10px 12px",borderRadius:9,background:G.card,border:`1px solid ${G.border}`,marginBottom:14, marginTop:15}}>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:G.text}}>Thống kê</div>
           <div style={{fontSize:10,color:G.muted,marginTop:1,display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -749,7 +895,6 @@ function EditPlayerModal({player,onSave,onClose,toast}){
           <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),totalSpent:0,monthSpent:0,paidAmount:0});toast(`Reset chi phí: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset chi phí</button>
         </div>
       </div>}
-    </div>
     <div style={{display:"flex",gap:8}}><button onClick={save} style={{...bP,flex:1,padding:"11px 0"}}>💾 Lưu thay đổi</button><button onClick={onClose} style={bS}>Huỷ</button></div>
   </MBox>;
 }
@@ -808,8 +953,9 @@ function QRModal({players,onRegister,onClose,onCheckInAll,activeEvent}){
   const submit=()=>{
     if(!safe(form.name).trim()){setErr("Nhập tên");return;}setErr("");
     const ex=players.find(p=>p&&safe(p.name).toLowerCase()===safe(form.name).toLowerCase().trim());
-    if(ex){const cid=form.cwith?(ex.coupleId||`couple-${uid()}`):ex.coupleId;const reg={...ex,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,paid:form.paid||ex.paid||false,coupleId:form.cwith?cid:ex.coupleId,coupleType:form.cwith?form.ctype:ex.coupleType,coupleWithId:form.cwith||null,isNew:false};onRegister(reg);setAdded(reg);}
-    else{const np={id:uid(),name:form.name.trim(),gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,paid:form.paid||false,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};onRegister(np);setAdded(np);}
+    let vcode = ex?.viewerCode || Math.random().toString(36).slice(2,6).toUpperCase();
+    if(ex){const cid=form.cwith?(ex.coupleId||`couple-${uid()}`):ex.coupleId;const reg={...ex,viewerCode:vcode,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,paid:form.paid||ex.paid||false,coupleId:form.cwith?cid:ex.coupleId,coupleType:form.cwith?form.ctype:ex.coupleType,coupleWithId:form.cwith||null,isNew:false};onRegister(reg);setAdded(reg);}
+    else{const np={id:uid(),viewerCode:vcode,name:form.name.trim(),gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,paid:form.paid||false,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};onRegister(np);setAdded(np);}
     setStep("success");
   };
   return <Overlay onClose={onClose}>
@@ -875,6 +1021,12 @@ function QRModal({players,onRegister,onClose,onCheckInAll,activeEvent}){
             <div style={{fontSize:40,marginBottom:8}}>🎉</div>
             <div style={{fontSize:18,fontWeight:900,color:G.accent,marginBottom:4}}>{safe(added.name)}</div>
             <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:10}}><GBadge gender={added.gender}/><SBadge skill={added.skill}/></div>
+            
+            <div style={{marginBottom:14, padding:"8px 16px", background:"#0f1e33", border:`1px solid #172840`, borderRadius:10, display:"inline-block"}}>
+              <div style={{fontSize:10, color:"#4a6480", letterSpacing:1, marginBottom:2}}>MÃ ĐĂNG NHẬP KHÁN GIẢ</div>
+              <div style={{fontSize:24, color:"#00c9a7", fontWeight:900, letterSpacing:4}}>{added.viewerCode || "???"}</div>
+            </div>
+
             {/* Trạng thái thanh toán */}
             <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:12}}>
               {added.paid
@@ -1076,38 +1228,118 @@ function HCard({h}){
 }
 
 // ══════════════════════════════════════
+// MINIGAMES
+// ══════════════════════════════════════
+function Minigames() {
+  const [snake, setSnake] = React.useState([{x:10, y:10}]);
+  const [food, setFood] = React.useState({x:15, y:15});
+  const [dir, setDir] = React.useState({x:0, y:-1});
+  const [playing, setPlaying] = React.useState(false);
+  const [score, setScore] = React.useState(0);
+  const BOARD_SIZE = 20;
+
+  React.useEffect(() => {
+    if (!playing) return;
+    const interval = setInterval(() => {
+      setSnake(s => {
+        const head = s[0];
+        const newHead = {x: head.x + dir.x, y: head.y + dir.y};
+        if (newHead.x < 0 || newHead.x >= BOARD_SIZE || newHead.y < 0 || newHead.y >= BOARD_SIZE) {
+          setPlaying(false); return s;
+        }
+        if (s.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
+          setPlaying(false); return s;
+        }
+        const newSnake = [newHead, ...s];
+        if (newHead.x === food.x && newHead.y === food.y) {
+          setScore(c => c + 1);
+          setFood({ x: Math.floor(Math.random() * BOARD_SIZE), y: Math.floor(Math.random() * BOARD_SIZE) });
+        } else {
+          newSnake.pop();
+        }
+        return newSnake;
+      });
+    }, 150);
+    return () => clearInterval(interval);
+  }, [playing, dir, food]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!playing) return;
+      if (['ArrowUp', 'w', 'W'].includes(e.key) && dir.y === 0) setDir({x: 0, y: -1});
+      if (['ArrowDown', 's', 'S'].includes(e.key) && dir.y === 0) setDir({x: 0, y: 1});
+      if (['ArrowLeft', 'a', 'A'].includes(e.key) && dir.x === 0) setDir({x: -1, y: 0});
+      if (['ArrowRight', 'd', 'D'].includes(e.key) && dir.x === 0) setDir({x: 1, y: 0});
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dir, playing]);
+
+  const reset = () => { setSnake([{x:10, y:10}]); setDir({x:0, y:-1}); setScore(0); setPlaying(true); };
+
+  return (
+    <div style={{background: "#080f1e", borderRadius: 12, padding: 16, border: "1px solid #172840", height: "100%", display: "flex", flexDirection: "column"}}>
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12}}>
+        <div style={{fontSize: 14, fontWeight: 900, color: "#a78bfa", letterSpacing: 1}}>🐍 SNAKE GAME</div>
+        <div style={{color: "#00c9a7", fontWeight: 700}}>Score: {score}</div>
+      </div>
+      <div style={{flex: 1, position: "relative", background: "#050d18", border: "2px solid #172840", borderRadius: 8, overflow: "hidden", minHeight: 200}}>
+        {!playing && (
+          <div style={{position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 10}}>
+            <div style={{fontSize: 18, color: "white", fontWeight: 800, marginBottom: 12}}>{score > 0 ? `Game Over! Score: ${score}` : "Let's Play"}</div>
+            <button onClick={reset} style={{padding: "8px 24px", borderRadius: 8, background: "#a78bfa", color: "#fff", fontWeight: 800, border: "none", cursor: "pointer"}}>PLAY</button>
+          </div>
+        )}
+        {snake.map((seg, i) => (
+          <div key={i} style={{position: "absolute", left: `${(seg.x/BOARD_SIZE)*100}%`, top: `${(seg.y/BOARD_SIZE)*100}%`, width: `${(1/BOARD_SIZE)*100}%`, height: `${(1/BOARD_SIZE)*100}%`, background: i === 0 ? "#a78bfa" : "#8b5cf6", borderRadius: 2}} />
+        ))}
+        <div style={{position: "absolute", left: `${(food.x/BOARD_SIZE)*100}%`, top: `${(food.y/BOARD_SIZE)*100}%`, width: `${(1/BOARD_SIZE)*100}%`, height: `${(1/BOARD_SIZE)*100}%`, background: "#f43f5e", borderRadius: "50%"}} />
+      </div>
+      <div style={{marginTop: 12, fontSize: 10, color: "#4a6480", textAlign: "center"}}>Use <kbd>W,A,S,D</kbd> or <kbd>Arrow Keys</kbd> to play</div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════
 // TV MODE
 // ══════════════════════════════════════
-function TVMode({courts,elapsed,queue,players,history,onClose}){
+function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
   const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
   return <div style={{position:"fixed",inset:0,zIndex:800,background:"#000",display:"flex",flexDirection:"column"}}>
     <div style={{padding:"7px 16px",background:"#050d18",borderBottom:"2px solid #0c2040",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:G.accent}}>🏓 PICKLEBALL SOCIAL</span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:G.accent}}>🏓 PICKLEBALL SOCIAL</span>
+        {activeEvent?.updateDUPR && <span style={{background:"#1e3a8a",color:"#fff",padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:800,letterSpacing:1,border:"1px solid #3b82f6"}}>DUPR RATED</span>}
+      </div>
       <button onClick={onClose} style={bS}>✕ Đóng TV</button>
     </div>
-    <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7,padding:9,overflow:"hidden"}}>
-      {courts.map(ct=>{const m=ct.match;const el=elapsed[ct.id]||0;const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
-        return <div key={ct.id} style={{background:m?"#081810":"#060e18",borderRadius:11,border:`2px solid ${m?dc.color+"66":G.border}`,display:"flex",flexDirection:"column",padding:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}><span style={{fontSize:14,fontWeight:900,color:G.text}}>{ct.name}</span>{m&&<span style={{fontFamily:"monospace",fontSize:16,color:dc.color}}>{mm}:{ss}</span>}</div>
-          {m?<>
-            <div style={{padding:"5px 7px",borderRadius:7,background:G.accent+"10",border:`1px solid ${G.accent}30`,marginBottom:4}}>{(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
-            <div style={{textAlign:"center",fontSize:11,color:G.dim}}>VS</div>
-            <div style={{padding:"5px 7px",borderRadius:7,background:G.gold+"10",border:`1px solid ${G.gold}30`,marginTop:4}}>{(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
-          </>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><div style={{fontSize:22,color:G.accent}}>🟢</div><div style={{fontSize:11,color:G.muted,marginTop:3}}>READY</div></div>}
-        </div>;})}
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,padding:"0 9px 9px"}}>
-      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.blue}44`}}>
-        <div style={{fontSize:9,letterSpacing:3,color:G.blue,marginBottom:5}}>⚡ QUEUE ({queue.length})</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:10,color:G.text}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} vs {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
-          {!queue.length&&<div style={{color:G.dim,fontSize:10}}>Queue trống</div>}
+    <div style={{flex:1,display:"flex",gap:9,padding:9,overflow:"hidden"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",gap:7}}>
+        <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7}}>
+          {courts.map(ct=>{const m=ct.match;const el=elapsed[ct.id]||0;const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
+            return <div key={ct.id} style={{background:m?"#081810":"#060e18",borderRadius:11,border:`2px solid ${m?dc.color+"66":G.border}`,display:"flex",flexDirection:"column",padding:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}><span style={{fontSize:13,fontWeight:900,color:G.text}}>{ct.name}</span>{m&&<span style={{fontFamily:"monospace",fontSize:13,color:dc.color}}>{mm}:{ss}</span>}</div>
+              {m?<>
+                <div style={{padding:"4px 6px",borderRadius:7,background:G.accent+"10",border:`1px solid ${G.accent}30`,marginBottom:4}}>{(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,color:G.text}}>{safe(p.name)}</div>)}</div>
+                <div style={{textAlign:"center",fontSize:10,color:G.dim,margin:"2px 0"}}>VS</div>
+                <div style={{padding:"4px 6px",borderRadius:7,background:G.gold+"10",border:`1px solid ${G.gold}30`}}>{(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,color:G.text}}>{safe(p.name)}</div>)}</div>
+              </>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><div style={{fontSize:20,color:G.accent}}>🟢</div><div style={{fontSize:10,color:G.muted,marginTop:3}}>READY</div></div>}
+            </div>;})}
         </div>
-      </div>
-      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
-        <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
-        <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
-          {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+          <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.blue}44`}}>
+            <div style={{fontSize:9,letterSpacing:3,color:G.blue,marginBottom:5}}>⚡ QUEUE ({queue.length})</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:10,color:G.text}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} vs {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
+              {!queue.length&&<div style={{color:G.dim,fontSize:10}}>Queue trống</div>}
+            </div>
+          </div>
+          <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
+            <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
+            <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+              {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1117,67 +1349,166 @@ function TVMode({courts,elapsed,queue,players,history,onClose}){
 // ══════════════════════════════════════
 // VIEWER MODE
 // ══════════════════════════════════════
-function ViewerMode({players,courts,history,queue,elapsed,events,activeEventId,onLogout,numCourts}){
+function ViewerMode({me,players,courts,history,queue,elapsed,events,activeEventId,onLogout,onChallenge,numCourts}){
   const [vtab,setVtab]=useState("courts");
+  const [challenging, setChallenging] = useState(null); // { partner: null, opp1: null, opp2: null }
+
   const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:p.kootoro||0})).sort((a,b)=>b.k-a.k);
   const ci=players.filter(p=>p?.checkedIn).length;
   const activeEvent=events?.find(e=>e.id===activeEventId);
   const gameMode=activeEvent?.gameMode||"normal";
   const modInfo=GAME_MODES.find(m=>m.val===gameMode)||GAME_MODES[0];
+  const pIdx = ranked.findIndex(p => p.id === me?.id);
+  const myRank = pIdx !== -1 ? pIdx + 1 : "?";
+
   const VTABS=[
     {id:"courts",    l:"🏟️ Sân đấu"},
     {id:"queue",     l:"⚔️ Hàng chờ"},
     {id:"leaderboard",l:"🏆 Xếp hạng"},
+    {id:"events",    l:"📅 Sự kiện"},
     {id:"history",   l:"📋 Lịch sử"},
     {id:"analytics", l:"📈 Thống kê"},
+    {id:"minigame",  l:"🎮 Giải trí"},
   ];
+
+  const playingIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+  const queuedIds=new Set(queue.flatMap(q=>[...(q.team1||[]),...(q.team2||[])].filter(Boolean).map(p=>p.id)));
+  const availablePlayers = players.filter(p => p?.checkedIn && !playingIds.has(p.id) && !queuedIds.has(p.id) && p.id !== me?.id);
+
   return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-    <header style={{height:50,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${G.gold},${G.red})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>👁</div>
+    <header style={{height:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:32,height:32,borderRadius:8,background:`linear-gradient(135deg,${G.gold},${G.red})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>👁</div>
         <div>
-          <div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:"#fff",lineHeight:1}}>
+          <div style={{fontWeight:900,fontSize:13,letterSpacing:2,color:"#fff",lineHeight:1}}>
             {activeEvent?activeEvent.name:"PICKLEBALL LIVE"}
           </div>
-          <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{modInfo.label} · CHỈ XEM</div>
+          <div style={{fontSize:9,color:G.muted,display:"flex",gap:6,alignItems:"center",marginTop:3}}>
+            <span>{modInfo.label}</span>
+            {activeEvent?.updateDUPR && <span style={{background:"#1e3a8a",color:"#fff",padding:"2px 5px",borderRadius:4,fontSize:8,fontWeight:800,border:"1px solid #3b82f6"}}>DUPR</span>}
+          </div>
         </div>
       </div>
+
+      {me?.isPlayer && (
+        <div style={{flex:1, margin:"0 20px", background:G.card, borderRadius:10, padding:"6px 15px", border:`1px solid ${G.border}`, display:"flex", alignItems:"center", gap:15, maxWidth:500}}>
+          <PlayerAvatar name={me.name} size={32} color={me.avatarColor} />
+          <div style={{flex:1}}>
+            <div style={{fontSize:12, fontWeight:900, color:"#fff"}}>{me.name} {me.membership?.type && "💎"}</div>
+            <div style={{display:"flex", gap:10, fontSize:9, color:G.muted, fontWeight:700}}>
+              <span>RANK: <b style={{color:G.gold}}>#{myRank}</b></span>
+              <span>ELO: <b style={{color:G.accent}}>{me.elo||"?"}</b></span>
+              <span>KOOTORO: <b style={{color:G.gold}}>{me.kootoro||0}</b></span>
+            </div>
+          </div>
+          <div style={{fontSize:10, color:G.dim, fontFamily:"monospace"}}>#{me.viewerCode}</div>
+        </div>
+      )}
+
       <div style={{display:"flex",alignItems:"center",gap:6}}>
-        <Chip label={`✅ ${ci}`} color={G.accent}/>
-        <Chip label={`🔴 ${courts.filter(c=>c.match).length}/${numCourts||courts.length}`} color={G.red}/>
-        <Chip label={`⏳ ${queue.length}`} color={G.purple}/>
+        <div style={{display:"flex", gap:4, marginRight:10}}>
+          <Chip label={`✅ ${ci}`} color={G.accent}/>
+          <Chip label={`🔴 ${courts.filter(c=>c.match).length}/${numCourts||courts.length}`} color={G.red}/>
+        </div>
         <button onClick={onLogout} style={bS}>← Thoát</button>
       </div>
     </header>
-    <nav style={{display:"flex",gap:2,padding:"4px 12px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
-      {VTABS.map(t=><button key={t.id} onClick={()=>setVtab(t.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",background:vtab===t.id?G.gold+"22":"transparent",color:vtab===t.id?G.gold:G.muted,borderBottom:vtab===t.id?`2px solid ${G.gold}`:"2px solid transparent"}}>{t.l}</button>)}
-    </nav>
-    <main style={{padding:"12px 14px",maxWidth:1400,margin:"0 auto"}}>
-      {vtab==="courts"&&<div>
-        {/* Game mode banner */}
-        {gameMode!=="normal"&&<div style={{padding:"8px 14px",borderRadius:9,background:gameMode==="king"?G.gold+"14":G.purple+"14",border:`1px solid ${gameMode==="king"?G.gold:G.purple}44`,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:16}}>{modInfo.label.split(" ")[0]}</span>
-          <div><div style={{fontSize:12,fontWeight:800,color:gameMode==="king"?G.gold:G.purple}}>{modInfo.label}</div><div style={{fontSize:10,color:G.muted}}>{modInfo.desc}</div></div>
-        </div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10,marginBottom:14}}>
-          {courts.map((c,i)=><CourtCardViewer key={c.id} court={c} elapsed={elapsed[c.id]||0} courtIdx={i} gameMode={gameMode}/>)}
-        </div>
-        {/* Queue preview */}
-        {queue.length>0&&<div style={{marginBottom:14}}>
-          <div style={{fontSize:10,fontWeight:700,color:G.purple,letterSpacing:2,marginBottom:7}}>⚔️ HÀNG CHỜ ({queue.length} trận)</div>
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {queue.map((q,i)=>{
-              const dc=DTYPE_OPT.find(d=>d.val===q.dtype)||DTYPE_OPT[3];
-              const diff=Math.abs(teamElo(q.team1||[])-teamElo(q.team2||[]));
-              return <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 11px",borderRadius:8,background:G.panel,border:`1px solid ${G.border}`}}>
-                <span style={{fontSize:10,fontWeight:800,color:G.muted,minWidth:16}}>#{i+1}</span>
-                <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:dc.color+"20",color:dc.color,fontWeight:600}}>{dc.label}</span>
-                <div style={{flex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                  {(q.team1||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:10,color:G.accent,fontWeight:600}}>{safe(p.name).split(" ").pop()}</span>)}
-                  <span style={{fontSize:9,color:G.dim}}>vs</span>
-                  {(q.team2||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:10,color:G.gold,fontWeight:600}}>{safe(p.name).split(" ").pop()}</span>)}
+
+    {/* CHALLENGE SELECTION MODAL */}
+    {challenging && (
+      <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div style={{background:G.bg, borderRadius:16, border:`1px solid ${G.border}`, width:400, padding:20, boxShadow:"0 20px 40px #000"}}>
+          <div style={{fontSize:16, fontWeight:900, marginBottom:15, textAlign:"center"}}>⚔️ THÁCH ĐẤU 2V2</div>
+          
+          <div style={{marginBottom:15}}>
+            <div style={{fontSize:10, color:G.muted, marginBottom:5, fontWeight:800}}>CHỌN ĐỒNG ĐỘI</div>
+            <div style={{display:"flex", gap:5, flexWrap:"wrap", maxHeight:120, overflowY:"auto"}} className="hscroll">
+              {availablePlayers.map(p => (
+                <button key={p.id} onClick={()=>setChallenging(prev=>({...prev, partner: p.id===prev.partner?null:p}))} style={{padding:"6px 10px", borderRadius:6, border:`1px solid ${challenging.partner?.id===p.id?G.accent:G.border}`, background:challenging.partner?.id===p.id?G.accent+"22":"transparent", color:challenging.partner?.id===p.id?G.accent:G.text, fontSize:11, fontWeight:700, cursor:"pointer"}}>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10, color:G.muted, marginBottom:5, fontWeight:800}}>CHỌN ĐỐI THỦ (2 NGƯỜI)</div>
+            <div style={{display:"flex", gap:5, flexWrap:"wrap", maxHeight:120, overflowY:"auto"}} className="hscroll">
+              {availablePlayers.filter(p=>p.id!==challenging.partner?.id).map(p => {
+                const isSelected = challenging.opp1?.id===p.id || challenging.opp2?.id===p.id;
+                return <button key={p.id} onClick={()=>{
+                  setChallenging(prev => {
+                    if (prev.opp1?.id===p.id) return {...prev, opp1:null};
+                    if (prev.opp2?.id===p.id) return {...prev, opp2:null};
+                    if (!prev.opp1) return {...prev, opp1:p};
+       </div>}
+      {vtab==="events"&&<div style={{display:"flex", flexDirection:"column", gap:12}}>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:5}}>📅 Sự kiện & Giải đấu</div>
+        {!events?.length ? <div style={{padding:40, textAlign:"center", color:G.dim, background:G.panel, borderRadius:12, border:`1px solid ${G.border}`}}>Hiện không có sự kiện nào sắp tới</div> : 
+          [...events].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(ev => (
+            <div key={ev.id} style={{background:G.card, borderRadius:15, border:`1px solid ${ev.id===activeEventId?G.accent:G.border}`, padding:16, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+              <div>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  <div style={{fontSize:14, fontWeight:900}}>{ev.name}</div>
+                  {ev.id===activeEventId && <Chip label="🔴 LIVE" color={G.red} style={{fontSize:8, padding:"2px 6px"}}/>}
                 </div>
-                <span style={{fontSize:9,color:diff<40?G.accent:G.gold,fontWeight:700}}>Δ{diff}</span>
+                <div style={{fontSize:11, color:G.muted, marginTop:4, display:"flex", gap:10}}>
+                  <span>📅 {ev.date}</span>
+                  <span>📍 {ev.location||"CLB Pickleball"}</span>
+                </div>
+                <div style={{fontSize:10, color:G.gold, marginTop:4, fontWeight:700}}>Phí: {ev.fee?(ev.fee/1000).toFixed(0)+'k':'Miễn phí'} / người</div>
+              </div>
+              <button onClick={()=>{
+                alert(`Vui lòng quét QR của Host để chuyển khoản ${ev.fee?(ev.fee/1000).toFixed(0)+'k':''} cọc giữ chỗ cho sự kiện: ${ev.name}\n\nNội dung: [Tên của bạn] - ${ev.name}`);
+              }} style={{...bP, background: ev.id===activeEventId?G.accent:G.card, border: ev.id===activeEventId?`none`:`1px solid ${G.accent}`, color: ev.id===activeEventId?`#000`:G.accent, padding:"8px 16px", borderRadius:10, fontSize:12}}>🎟 Giữ chỗ</button>
+            </div>
+          ))
+        }
+      </div>}
+      {vtab==="queue"&&<div>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>⚔️ Hàng chờ ({queue.length} trận)</div>
+        {me?.isPlayer && (
+          <div style={{marginBottom:14, padding:"12px 16px", background:"#052015", border:`1px solid #00c9a788`, borderRadius:8}}>
+            <div style={{fontSize:12, fontWeight:800, color:"#00c9a7", marginBottom:6}}>👤 TRẠNG THÁI CÁ NHÂN: {me.name}</div>
+            <div style={{fontSize:11, color:"#dde6f5"}}>
+              {queue.findIndex(q => [...(q.team1||[]), ...(q.team2||[])].some(p => p.id === me.id)) !== -1 
+                ? `👉 Bạn đang ở trận số ${queue.findIndex(q => [...(q.team1||[]), ...(q.team2||[])].some(p => p.id === me.id)) + 1} trong hàng chờ!`
+                : (courts.some(c => c.match && [...(c.match.team1||[]), ...(c.match.team2||[])].some(p => p.id === me.id)) 
+                   ? "🔥 Bạn đang thi đấu trên sân! Cố gắng nhé!" 
+                   : "💤 Bạn hiện chưa được xếp trận. Vui lòng chờ hoặc thách đấu người khác!")}
+            </div>
+          </div>
+        )}
+        {!queue.length?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"40px 0",borderRadius:12,border:`1px solid ${G.border}`,background:G.panel}}>Chưa có trận nào trong hàng chờ</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{queue.map((q,i)=>{
+          const isMyMatch = me?.isPlayer && [...(q.team1||[]), ...(q.team2||[])].some(p=>p.id===me.id);
+          return <div key={i} style={{border:isMyMatch?`2px solid #00c9a7`:"none", borderRadius:10, overflow:"hidden"}}><QRow q={q} idx={i} courts={courts} readOnly/></div>;
+        })}</div>}
+
+        {/* Players waiting */}
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:10,fontWeight:700,color:G.accent,letterSpacing:2,marginBottom:8}}>⏳ ĐANG CHỜ</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {(()=>{
+               const playingIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+               const queuedIds=new Set(queue.flatMap(q=>[...(q.team1||[]),...(q.team2||[])].filter(Boolean).map(p=>p.id)));
+               return players.filter(p=>p?.checkedIn&&!playingIds.has(p.id)&&p.name).sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=>{
+                 const isMe = me?.id === p.id;
+                 return <div key={p.id} style={{padding:"6px 10px",borderRadius:6,background:isMe?"#00c9a722":G.card,border:isMe?`1px solid #00c9a7`:`1px solid ${G.border}`,fontSize:11,display:"flex",gap:6,alignItems:"center"}}>
+                   <span style={{color:p.gender==="M"?"#60a5fa":"#f472b6"}}>{p.gender==="M"?"♂":"♀"}</span>
+                   <span style={{color:isMe?"#00c9a7":G.text,fontWeight:700}}>{safe(p.name)}</span>
+                   <span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:SKILL_COLOR[p.skill]+"25",color:SKILL_COLOR[p.skill]}}>{p.skill}</span>
+                   {me?.isPlayer && !isMe && !queuedIds.has(me.id) && !queuedIds.has(p.id) && (
+                     <button onClick={()=>{
+                       setChallenging({partner: null, opp1: p, opp2: null});
+                     }} style={{marginLeft:4, padding:"3px 8px", borderRadius:4, background:"#f43f5e22", border:"1px solid #f43f5e", color:"#f43f5e", fontSize:9, fontWeight:700, cursor:"pointer"}}>⚔️ Thách đấu</button>
+                   )}
+                 </div>
+               });
+            })()}
+          </div>
+        </div>
+      </div>}�{diff}</span>
               </div>;
             })}
           </div>
@@ -1187,19 +1518,52 @@ function ViewerMode({players,courts,history,queue,elapsed,events,activeEventId,o
       </div>}
       {vtab==="queue"&&<div>
         <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>⚔️ Hàng chờ ({queue.length} trận)</div>
+        {me?.isPlayer && (
+          <div style={{marginBottom:14, padding:"12px 16px", background:"#052015", border:`1px solid #00c9a788`, borderRadius:8}}>
+            <div style={{fontSize:12, fontWeight:800, color:"#00c9a7", marginBottom:6}}>👤 TRẠNG THÁI CÁ NHÂN: {me.name}</div>
+            <div style={{fontSize:11, color:"#dde6f5"}}>
+              {queue.findIndex(q => [...(q.team1||[]), ...(q.team2||[])].some(p => p.id === me.id)) !== -1 
+                ? `👉 Bạn đang ở trận số ${queue.findIndex(q => [...(q.team1||[]), ...(q.team2||[])].some(p => p.id === me.id)) + 1} trong hàng chờ!`
+                : (courts.some(c => c.match && [...(c.match.team1||[]), ...(c.match.team2||[])].some(p => p.id === me.id)) 
+                   ? "🔥 Bạn đang thi đấu trên sân! Cố gắng nhé!" 
+                   : "💤 Bạn hiện chưa được xếp trận. Vui lòng chờ hoặc thách đấu người khác!")}
+            </div>
+          </div>
+        )}
         {!queue.length?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"40px 0",borderRadius:12,border:`1px solid ${G.border}`,background:G.panel}}>Chưa có trận nào trong hàng chờ</div>:
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} readOnly/>)}</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{queue.map((q,i)=>{
+          const isMyMatch = me?.isPlayer && [...(q.team1||[]), ...(q.team2||[])].some(p=>p.id===me.id);
+          return <div key={i} style={{border:isMyMatch?`2px solid #00c9a7`:"none", borderRadius:10, overflow:"hidden"}}><QRow q={q} idx={i} courts={courts} readOnly/></div>;
+        })}</div>}
+
         {/* Players waiting */}
         <div style={{marginTop:14}}>
-          <div style={{fontSize:10,fontWeight:700,color:G.accent,letterSpacing:2,marginBottom:8}}>⏳ ĐANG CHỜ ({players.filter(p=>p?.checkedIn&&!courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])]:[])).filter(Boolean).some(pp=>pp.id===undefined)?0:players.filter(p=>p?.checkedIn).length-courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean):[]).length} người)</div>
+          <div style={{fontSize:10,fontWeight:700,color:G.accent,letterSpacing:2,marginBottom:8}}>⏳ ĐANG CHỜ</div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {(()=>{const playingIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));return players.filter(p=>p?.checkedIn&&!playingIds.has(p.id)&&p.name).sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=><div key={p.id} style={{padding:"4px 9px",borderRadius:6,background:G.card,border:`1px solid ${G.border}`,fontSize:10,display:"flex",gap:4,alignItems:"center"}}><span style={{color:p.gender==="M"?"#60a5fa":"#f472b6"}}>{p.gender==="M"?"♂":"♀"}</span><span style={{color:G.text,fontWeight:600}}>{safe(p.name)}</span><span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:SKILL_COLOR[p.skill]+"25",color:SKILL_COLOR[p.skill]}}>{p.skill}</span></div>);})()}
+            {(()=>{
+               const playingIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+               const queuedIds=new Set(queue.flatMap(q=>[...(q.team1||[]),...(q.team2||[])].filter(Boolean).map(p=>p.id)));
+               return players.filter(p=>p?.checkedIn&&!playingIds.has(p.id)&&p.name).sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=>{
+                 const isMe = me?.id === p.id;
+                 return <div key={p.id} style={{padding:"6px 10px",borderRadius:6,background:isMe?"#00c9a722":G.card,border:isMe?`1px solid #00c9a7`:`1px solid ${G.border}`,fontSize:11,display:"flex",gap:6,alignItems:"center"}}>
+                   <span style={{color:p.gender==="M"?"#60a5fa":"#f472b6"}}>{p.gender==="M"?"♂":"♀"}</span>
+                   <span style={{color:isMe?"#00c9a7":G.text,fontWeight:700}}>{safe(p.name)}</span>
+                   <span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:SKILL_COLOR[p.skill]+"25",color:SKILL_COLOR[p.skill]}}>{p.skill}</span>
+                   {me?.isPlayer && !isMe && !queuedIds.has(me.id) && !queuedIds.has(p.id) && (
+                     <button onClick={()=>{
+                       if(confirm(`Bạn muốn đưa ra lời thách đấu trực tiếp với ${p.name}?`)) onChallenge(me.id, p);
+                     }} style={{marginLeft:4, padding:"3px 8px", borderRadius:4, background:"#f43f5e22", border:"1px solid #f43f5e", color:"#f43f5e", fontSize:9, fontWeight:700, cursor:"pointer"}}>⚔️ Thách đấu</button>
+                   )}
+                 </div>
+               });
+            })()}
           </div>
         </div>
       </div>}
-      {vtab==="leaderboard"&&<LeaderView ranked={ranked}/>}
+      {vtab==="leaderboard"&&<LeaderView ranked={ranked} history={history}/>}
       {vtab==="history"&&<HistoryTab history={history} events={events} players={players} readOnly/>}
       {vtab==="analytics"&&<AnalyticsView players={players} history={history} courts={courts}/>}
+      {vtab==="minigame"&&<div style={{height:"70vh",maxWidth:800,margin:"0 auto"}}><Minigames /></div>}
     </main>
   </div>;
 }
@@ -1243,41 +1607,77 @@ function CourtCardViewer({court,elapsed,courtIdx,gameMode}){
 // ══════════════════════════════════════
 // LEADERBOARD
 // ══════════════════════════════════════
-function LeaderView({ranked}){
+// ── LEADERBOARD (GAMIFIED)
+function LeaderView({ranked, history}){
   return <div>
-    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Kootoro</div>
-    {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:16,justifyContent:"center",alignItems:"flex-end"}}>
+    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+      <span>🏆 Bảng xếp hạng Kootoro</span>
+      <span style={{fontSize:10,background:G.accent+"15",color:G.accent,padding:"2px 6px",borderRadius:4,border:`1px solid ${G.accent}44`}}>LADDER SEASON 1</span>
+    </div>
+
+    {/* Top 3 Podium */}
+    {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:24,justifyContent:"center",alignItems:"flex-end",paddingBottom:10}}>
       {[ranked[1],ranked[0],ranked[2]].filter(Boolean).map((p,pi)=>{
-        const rank=pi===0?2:pi===1?1:3;const h=rank===1?120:rank===2?90:75;const c=rank===1?G.gold:rank===2?"#9ca3af":"#b87333";
-        return <div key={p.id} style={{textAlign:"center",width:120}}>
-          <div style={{fontSize:11,fontWeight:800,color:G.text,marginBottom:3}}>{safe(p.name)}</div>
-          <div style={{display:"flex",gap:3,justifyContent:"center",marginBottom:3}}><SBadge skill={p.skill}/><GBadge gender={p.gender}/></div>
-          <div style={{fontSize:rank===1?22:18,fontWeight:900,color:c,marginBottom:4}}>{p.k>0?"+":""}{p.k}</div>
-          <div style={{height:h,background:`${c}22`,border:`2px solid ${c}55`,borderRadius:"7px 7px 0 0",display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:6}}>
-            <span style={{fontSize:rank===1?28:22}}>{rank===1?"🥇":rank===2?"🥈":"🥉"}</span>
+        const rank=pi===0?2:pi===1?1:3;
+        const tier = getTier(p.k);
+        const h=rank===1?140:rank===2?105:90;
+        const c=rank===1?G.gold:rank===2?"#9ca3af":"#b87333";
+        return <div key={p.id} style={{textAlign:"center",width:120,position:"relative"}}>
+          <div style={{position:"relative",display:"inline-block",marginBottom:8}}>
+            <PlayerAvatar name={p.name} size={rank===1?64:48} color={p.avatarColor} style={{border:`3px solid ${tier.color}`, boxShadow:`0 0 15px ${tier.color}44`}} />
+            <div style={{position:"absolute",bottom:-5,right:-5,background:tier.color,color:"#000",borderRadius:"50%",width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,border:"2px solid #000"}}>{rank}</div>
+          </div>
+          <div style={{fontSize:12,fontWeight:900,color:G.text,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+          <div style={{fontSize:11,fontWeight:700,color:tier.color,marginBottom:6}}>{tier.icon} {tier.label}</div>
+          
+          <div style={{height:h,background:`linear-gradient(to top, ${tier.color}33, transparent)`,border:`2px solid ${tier.color}44`,borderRadius:"12px 12px 0 0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
+            <div style={{fontSize:18,fontWeight:900,color:tier.color}}>{p.k>0?"+":""}{p.k}</div>
+            <div style={{fontSize:9,color:G.muted,fontWeight:700}}>KOOTORO</div>
           </div>
         </div>;
       })}
     </div>}
-    <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
-      <div style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div>
+
+    {/* Ladder Board */}
+    <div style={{background:G.panel,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 70px",padding:"12px 16px",borderBottom:`1px solid ${G.border}`,fontSize:10,color:G.muted,fontWeight:800,letterSpacing:1}}>
+        <div>POS</div><div>PLAYER / TIER</div><div>PROGRESS</div><div style={{textAlign:"right"}}>KOOTORO</div>
       </div>
-      {ranked.map((p,i)=>{
-        const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0;
-        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:i<ranked.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
-          <div style={{fontSize:12,fontWeight:800,color:i<3?[G.gold,"#9ca3af","#b87333"][i]:G.muted}}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</div>
-          <div style={{fontSize:11,fontWeight:700,color:G.text,display:"flex",alignItems:"center",gap:3}}>{safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}{p.checkedIn&&<span style={{fontSize:8,color:G.accent}}>●</span>}</div>
-          <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
-          <div style={{fontSize:12,fontWeight:900,color:SKILL_COLOR[p.skill]||G.muted}}>{p.elo||"?"}</div>
-          <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
-          <div style={{fontSize:10,color:wr>=50?G.accent:G.red,fontWeight:700}}>{wr}%</div>
-          <div style={{fontSize:13,fontWeight:800,color:p.k>0?G.gold:p.k<0?G.red:G.muted}}>{p.k>0?"+":""}{p.k}</div>
-        </div>;
-      })}
+      <div style={{maxHeight:500,overflowY:"auto"}} className="hscroll">
+        {ranked.map((p,i)=>{
+          const tier = getTier(p.k);
+          const prog = tierProgress(p.k);
+          const badges = playerBadges(p, history);
+          return <div key={p.id} style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 70px",padding:"10px 16px",borderBottom:i<ranked.length-1?`1px solid ${G.border}33`:undefined,background:i%2?"transparent":G.card+"22",alignItems:"center"}}>
+            <div style={{fontSize:13,fontWeight:900,color:i<3?G.gold:G.muted}}>{i+1}</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <PlayerAvatar name={p.name} size={32} color={p.avatarColor} />
+              <div>
+                <div style={{fontSize:12,fontWeight:800,color:G.text,display:"flex",alignItems:"center",gap:5}}>
+                  {safe(p.name)}
+                  {badges.map(b=><span key={b.label} title={b.label} style={{fontSize:10}}>{b.icon}</span>)}
+                </div>
+                <div style={{fontSize:9,fontWeight:700,color:tier.color,display:"flex",alignItems:"center",gap:4}}>
+                  {tier.icon} {tier.label}
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style={{width:"100%",height:6,background:G.border,borderRadius:3,overflow:"hidden",marginBottom:4}}>
+                <div style={{width:`${prog}%`,height:"100%",background:tier.color,boxShadow:`0 0 8px ${tier.color}88`}} />
+              </div>
+              <div style={{fontSize:8,fontWeight:700,color:G.dim}}>{prog}% TO NEXT TIER</div>
+            </div>
+            <div style={{textAlign:"right",fontSize:13,fontWeight:900,color:p.k>0?G.gold:p.k<0?G.red:G.muted}}>
+              {p.k>0?"+":""}{p.k}
+            </div>
+          </div>;
+        })}
+      </div>
     </div>
   </div>;
 }
+
 
 // ══════════════════════════════════════
 // ANALYTICS VIEW
@@ -1535,13 +1935,18 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
     if(existing){
       if(existing.checkedIn){setErr(`${nm} đã check in rồi!`);return;}
       const cid=form.cwith?(existing.coupleId||`couple-${uid()}`):existing.coupleId;
+      // Keep existing viewerCode or generate new one
+      const vcode = existing.viewerCode || Math.random().toString(36).slice(2,6).toUpperCase();
       playerData={...existing,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,
+        viewerCode:vcode,
         paid:form.paid,payMethod:form.payMethod,paidAmount:form.paid?perPerson:0,
         coupleId:form.cwith?cid:existing.coupleId,coupleType:form.cwith?form.ctype:existing.coupleType,
         coupleWithId:form.cwith||null,isNew:false};
     } else {
+      const vcode = Math.random().toString(36).slice(2,6).toUpperCase();
       playerData={id:uid(),name:nm,gender:form.gender,skill:form.skill,elo:skillElo(form.skill),
         dtype:form.dtype,checkedIn:true,paid:form.paid,payMethod:form.payMethod,
+        viewerCode:vcode,
         paidAmount:form.paid?perPerson:0,gamesPlayed:0,wins:0,lastPartners:[],
         coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,
         coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};
@@ -1787,6 +2192,14 @@ function KioskTab({players, onRegister, queue, courts, history, activeEvent, acc
           {submitted.paid?"✅ Đã TT":"⏳ Chưa TT"}
         </span>
       </div>
+
+      {/* ── VIEWER CODE ── */}
+      {submitted.viewerCode && <div style={{margin:"0 auto 20px",padding:"16px 20px",borderRadius:16,background:"#050d18",border:"2px solid #00c9a766",maxWidth:320}}>
+        <div style={{fontSize:10,fontWeight:700,color:"#00c9a7",letterSpacing:2,marginBottom:8}}>📱 MÃ ĐĂNG NHẬP CÁ NHÂN</div>
+        <div style={{fontSize:42,fontWeight:900,letterSpacing:10,color:"#00c9a7",marginBottom:8}}>{submitted.viewerCode}</div>
+        <div style={{fontSize:11,color:"#7a99bb",lineHeight:1.5}}>Dùng mã này để theo dõi lượt của bạn<br/>trên điện thoại qua chế độ <b>Xem trực tiếp</b></div>
+      </div>}
+
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
         <div style={{padding:"16px",borderRadius:12,background:G.accent+"15",border:`1px solid ${G.accent}44`,textAlign:"center"}}>
           <div style={{fontSize:9,color:G.muted,marginBottom:4}}>TRẠNG THÁI</div>
@@ -2234,15 +2647,24 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onEdit
       <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="kootoro">↓ Kootoro</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
     </div>
     <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
-      <div style={{display:"grid",gridTemplateColumns:"145px 48px 58px 88px 55px 44px 46px 68px 90px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div>ACTION</div>
+      <div style={{display:"grid",gridTemplateColumns:"165px 45px 58px 88px 55px 44px 46px 68px 52px 90px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
+        <div>NGƯỜI CHƠI</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div style={{color:"#00c9a7"}}>MÃ</div><div>ACTION</div>
       </div>
       {list.map((p,i)=>{
         const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=p.kootoro||0;
-        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"145px 48px 58px 88px 55px 44px 46px 68px 90px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
-          <div style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:3}}>
-            {p.phone&&<span title={p.phone} style={{fontSize:8,color:G.blue}}>📱</span>}
-            {safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}
+        const badges = playerBadges(p, history);
+        return <div key={p.id} style={{display:"grid",gridTemplateColumns:"165px 45px 58px 88px 55px 44px 46px 68px 52px 90px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
+          <div style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+            <PlayerAvatar name={p.name} size={24} color={p.avatarColor} />
+            <div style={{display:"flex",flexDirection:"column"}}>
+              <div style={{display:"flex",alignItems:"center",gap:3}}>
+                {safe(p.name)}{p.coupleId&&<CBadge type={p.coupleType}/>}
+                {p.membership?.type && <span title="Thành viên" style={{fontSize:10}}>💎</span>}
+              </div>
+              <div style={{display:"flex",gap:2}}>
+                {badges.map(b=><span key={b.label} title={b.label} style={{fontSize:9}}>{b.icon}</span>)}
+              </div>
+            </div>
           </div>
           <div><GBadge gender={p.gender}/></div><div><SBadge skill={p.skill}/></div>
           <div>{playing?<Chip label="🔴 Đấu" color={G.red}/>:p.checkedIn?<Chip label="⏳ Chờ" color={G.purple}/>:<Chip label="❌ Out" color={G.muted}/>}</div>
@@ -2250,6 +2672,7 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onEdit
           <div style={{fontSize:10,color:G.muted}}>{p.gamesPlayed||0}</div>
           <div style={{fontSize:10,color:wr>=50?G.accent:G.red,fontWeight:700}}>{wr}%</div>
           <div style={{fontSize:11,fontWeight:800,color:k>0?G.gold:k<0?G.red:G.muted}}>{k>0?"+":""}{k}</div>
+          <div style={{fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1,color:p.viewerCode?"#00c9a7":G.dim,padding:"2px 4px",borderRadius:4,background:p.viewerCode?"#00c9a711":"transparent",border:p.viewerCode?"1px solid #00c9a733":"none"}}>{p.viewerCode||"-"}</div>
           <div style={{display:"flex",gap:3}}>
             {onEdit&&<button onClick={()=>onEdit(p)} style={{padding:"3px 7px",borderRadius:5,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,cursor:"pointer",fontSize:9,fontWeight:700}}>✏️</button>}
             <button onClick={()=>onToggle(p.id)} style={{padding:"3px 8px",borderRadius:5,border:"none",cursor:"pointer",fontWeight:700,fontSize:9,background:p.checkedIn?G.accent+"22":`linear-gradient(135deg,${G.accent},${G.blue})`,color:p.checkedIn?G.accent:"#fff"}}>{p.checkedIn?"✅":"IN"}</button>
@@ -2321,10 +2744,11 @@ function App(){
   const [tvMode,   setTvMode]   = useState(false);
   const [toast,    setToast]    = useState(null);
   const [elapsed,  setElapsed]  = useState({});
+  const [pendingChallenges, setPendingChallenges] = useState([]);
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
   // Refs để saveAll luôn dùng state mới nhất — tránh stale closure
   const stateRef = useRef({});
-  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts};
+  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts,pendingChallenges};
 
   // Persist me vào sessionStorage — sống qua F5, chết khi đóng tab
   const login = (user) => {
@@ -2527,27 +2951,33 @@ function App(){
 
   const serializePlayers=pl=>pl.map(p=>({
     id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.baseElo||p.elo,
+    viewerCode:p.viewerCode||null,
     dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
     gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
     createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
     checkedIn:p.checkedIn||false,paid:p.paid||false,
     paidAmount:p.paidAmount||0,payMethod:p.payMethod||"transfer",
-    totalSpent:p.totalSpent||0,monthSpent:p.monthSpent||0,eventCount:p.eventCount||0
+    totalSpent:p.totalSpent||0,monthSpent:p.monthSpent||0,eventCount:p.eventCount||0,
+    membership:p.membership||null,avatarColor:p.avatarColor||null
   }));
 
   const handleRegister=data=>{
+    let codeStr = "";
     setPlayers(prev=>{
       const ex=prev.find(p=>p.id===data.id);
+      const newVCode = ex?.viewerCode || data.viewerCode || Math.random().toString(36).slice(2,6).toUpperCase();
+      codeStr = newVCode;
+      const newData = {...data, viewerCode: newVCode, checkedIn: true};
       let upd=ex
-        ? prev.map(p=>p.id===data.id?{...p,...data,checkedIn:true}:p)
-        : [...prev,{...data,checkedIn:true}];
+        ? prev.map(p=>p.id===data.id?{...p,...newData}:p)
+        : [...prev,newData];
       if(data.coupleWithId&&data.coupleId)
         upd=upd.map(p=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||"couple"}:p);
       window._lastSavedAt=Date.now();
       STORE.save({...stateRef.current,players:serializePlayers(upd)});
       return upd;
     });
-    showT(`${safe(data.name)} đã check in! 🎉`);
+    setTimeout(()=>showT(`${safe(data.name)} check-in. Mã xem: ${codeStr}`), 100);
   };
 
   const handleCheckInAll=()=>{
@@ -2556,6 +2986,41 @@ function App(){
     showT(`✅ Check-in tất cả ${upd.filter(p=>p?.checkedIn).length} người!`);
     window._lastSavedAt=Date.now();
     STORE.save({...stateRef.current,players:serializePlayers(upd)});
+  };
+
+  const handleChallenge = (meId, partnerId, opp1Id, opp2Id) => {
+    const allP = stateRef.current.players;
+    const me = allP.find(p=>p.id===meId);
+    const partner = allP.find(p=>p.id===partnerId);
+    const opp1 = allP.find(p=>p.id===opp1Id);
+    const opp2 = allP.find(p=>p.id===opp2Id);
+    if(!me||!partner||!opp1||!opp2) return;
+    const challenge = {
+      id: `ch_${uid()}`,
+      team1: [me, partner],
+      team2: [opp1, opp2],
+      dtype: 'any',
+      custom: true,
+      isChallenge: true,
+      status: 'pending',
+      requestedAt: new Date().toISOString()
+    };
+    setPendingChallenges(p=>[...p, challenge]);
+    showT(`⚔️ Lời thách đấu gửi đến Host — đang chờ duyệt!`);
+  };
+
+  const approveChallenge = (id) => {
+    const ch = stateRef.current.pendingChallenges.find(c=>c.id===id);
+    if(!ch) return;
+    setPendingChallenges(p=>p.filter(c=>c.id!==id));
+    const match = {...ch, status: 'approved'};
+    setQueue(q=>[match,...q]);
+    showT(`✅ Đã duyệt trận thách đấu!`);
+  };
+
+  const rejectChallenge = (id) => {
+    setPendingChallenges(p=>p.filter(c=>c.id!==id));
+    showT(`❌ Đã từ chối thách đấu.`, 'warn');
   };
 
   const genQueue=()=>{
@@ -2569,7 +3034,7 @@ function App(){
           if(o1&&o2){const dt=pair[0].gender!==pair[1].gender&&o1.gender!==o2.gender?"mixed":"any";newM.push({team1:[pair[0],pair[1]],team2:[o1,o2],dtype:dt,coupleMatch:true});[pair[0].id,pair[1].id,o1.id,o2.id].forEach(id=>used.add(id));}}
       }
     });
-    for(const dt of["mixed","male","female","any"]){const pool=available.filter(p=>!used.has(p.id));if(pool.length<4)break;const m=genMatch(pool,history,dt);if(m){newM.push(m);[...m.team1,...m.team2].forEach(p=>used.add(p.id));}}
+    for(const dt of["mixed","male","female","any"]){const pool=available.filter(p=>!used.has(p.id));if(pool.length<4)break;const m=genMatch(pool,history,dt,stateRef.current.accounts?.algo);if(m){newM.push(m);[...m.team1,...m.team2].forEach(p=>used.add(p.id));}}
     if(!newM.length){showT("Không tạo được trận!","warn");return;}
     setQueue(p=>[...p,...newM]);showT(`Đã thêm ${newM.length} trận ⚡`);
   };
@@ -2728,10 +3193,10 @@ function App(){
   const isSA=me?.role===ROLES.SA;
 
   if(loading) return <><style>{CSS}</style><div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:G.bg,flexDirection:"column",gap:16}}><div style={{fontSize:48}}>🏓</div><div style={{color:G.muted,fontSize:13,letterSpacing:2}}>ĐANG TẢI...</div></div></>;
-  if(!me) return <><style>{CSS}</style><Login accounts={accounts} onLogin={login} loading={false}/></>;
+  if(!me) return <><style>{CSS}</style><Login accounts={accounts} players={players} onLogin={login} loading={false}/></>;
   if(me.role===ROLES.VIEWER) return <><style>{CSS}</style>
     {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
-    <ViewerMode players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} activeEventId={activeEventId} numCourts={numCourts} onLogout={logout}/>
+    <ViewerMode me={me} players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} activeEventId={activeEventId} numCourts={numCourts} onLogout={logout} onChallenge={handleChallenge}/>
   </>;
 
   return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -2747,7 +3212,7 @@ function App(){
     {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
     {subCourt&&<SubModal court={subCourt} players={players} playIds={playIds} onSub={subPlayer} onClose={()=>setSubCourt(null)}/>}
     {editingPlayer&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
-    {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
+    {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)} activeEvent={activeEvent}/>}
 
     {/* HEADER — compact mobile */}
     <header style={{background:G.panel,borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
@@ -2803,6 +3268,38 @@ function App(){
       <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:"5px 14px"}}>🗓️ Tạo Event ngay</button>
       <span style={{fontSize:10,color:G.dim}}>Tạo event để lưu lịch sử trận đấu theo ngày</span>
     </div>}
+    {/* CHALLENGE APPROVAL BANNER (HOST) */}
+    {pendingChallenges.length > 0 && (me.role === ROLES.SA || me.role === ROLES.HOST) && (
+      <div style={{background:G.purple+"18", borderBottom:`1px solid ${G.purple}44`, padding:"10px 16px"}}>
+        <div style={{fontSize:11, fontWeight:800, color:G.purple, marginBottom:8, display:"flex", alignItems:"center", gap:6}}>
+          <span>⚔️ CÓ {pendingChallenges.length} YÊU CẦU THÁCH ĐẤU MỚI</span>
+          <div style={{width:8, height:8, borderRadius:"50%", background:G.red, animation:"ping 1.5s infinite"}} />
+        </div>
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {pendingChallenges.map(ch => (
+            <div key={ch.id} style={{background:G.card, borderRadius:12, border:`1px solid ${G.border}`, padding:12, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  <PlayerAvatar name={ch.team1[0].name} size={24} />
+                  <PlayerAvatar name={ch.team1[1].name} size={24} />
+                  <span style={{fontSize:12, fontWeight:700}}>{ch.team1[0].name} & {ch.team1[1].name}</span>
+                </div>
+                <span style={{fontSize:12, color:G.dim}}>VS</span>
+                <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  <PlayerAvatar name={ch.team2[0].name} size={24} />
+                  <PlayerAvatar name={ch.team2[1].name} size={24} />
+                  <span style={{fontSize:12, fontWeight:700}}>{ch.team2[0].name} & {ch.team2[1].name}</span>
+                </div>
+              </div>
+              <div style={{display:"flex", gap:6}}>
+                <button onClick={() => approveChallenge(ch.id)} style={{...bP, background:G.accent, color:"#000", padding:"6px 14px", fontSize:11}}>Duyệt ✅</button>
+                <button onClick={() => rejectChallenge(ch.id)} style={{...bS, color:G.red, border:`1px solid ${G.red}44`, padding:"6px 14px", fontSize:11}}>Từ chối ✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
 
     {/* NAV */}
     <nav style={{display:"flex",gap:2,padding:"4px 10px",background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:"auto"}}>
@@ -2822,7 +3319,7 @@ function App(){
       </div>}
       {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onEdit={setEditingPlayer} onResetAll={()=>{if(!confirm("Reset ELO + Kootoro TẤT CẢ về mùa mới?"))return;setPlayers(p=>p.map(x=>({...x,elo:SKILL_ELO[x.skill]||1200,baseElo:SKILL_ELO[x.skill]||1200,kootoro:0,gamesPlayed:0,wins:0,lastPartners:[]})));showT("🔄 Reset tất cả xong!","warn");}}/>}
       {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
-      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)}/>}
+      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)} history={history} />}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history} activeEvent={activeEvent} accounts={accounts} onSaveAccounts={newAcc=>{setAccounts(newAcc);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,accounts:newAcc});}}/>}
