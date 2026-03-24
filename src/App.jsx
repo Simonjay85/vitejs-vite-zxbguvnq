@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-
-// ── CONSTANTS
+import Minigames from "./Minigames";// ── CONSTANTS
 const SKILL_LEVELS = ["2.0","2.5","3.0","3.5","3.5+"];
 const SKILL_ELO    = {"2.0":1050,"2.5":1160,"3.0":1290,"3.5":1420,"3.5+":1570};
 const SKILL_COLOR  = {"2.0":"#94a3b8","2.5":"#60a5fa","3.0":"#34d399","3.5":"#f59e0b","3.5+":"#f43f5e"};
@@ -584,30 +583,37 @@ function TVMode({courts,elapsed,queue,players,history,onClose}){
       <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:G.accent}}>🏓 PICKLEBALL SOCIAL</span>
       <button onClick={onClose} style={bS}>✕ Đóng TV</button>
     </div>
-    <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7,padding:9,overflow:"hidden"}}>
-      {courts.map(ct=>{const m=ct.match;const el=elapsed[ct.id]||0;const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
-        return <div key={ct.id} style={{background:m?"#081810":"#060e18",borderRadius:11,border:`2px solid ${m?dc.color+"66":G.border}`,display:"flex",flexDirection:"column",padding:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}><span style={{fontSize:14,fontWeight:900,color:G.text}}>{ct.name}</span>{m&&<span style={{fontFamily:"monospace",fontSize:16,color:dc.color}}>{mm}:{ss}</span>}</div>
-          {m?<>
-            <div style={{padding:"5px 7px",borderRadius:7,background:G.accent+"10",border:`1px solid ${G.accent}30`,marginBottom:4}}>{(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
-            <div style={{textAlign:"center",fontSize:11,color:G.dim}}>VS</div>
-            <div style={{padding:"5px 7px",borderRadius:7,background:G.gold+"10",border:`1px solid ${G.gold}30`,marginTop:4}}>{(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:11,color:G.text}}>{safe(p.name)}</div>)}</div>
-          </>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><div style={{fontSize:22,color:G.accent}}>🟢</div><div style={{fontSize:11,color:G.muted,marginTop:3}}>READY</div></div>}
-        </div>;})}
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,padding:"0 9px 9px"}}>
-      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.blue}44`}}>
-        <div style={{fontSize:9,letterSpacing:3,color:G.blue,marginBottom:5}}>⚡ QUEUE ({queue.length})</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:10,color:G.text}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} vs {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
-          {!queue.length&&<div style={{color:G.dim,fontSize:10}}>Queue trống</div>}
+    <div style={{flex:1,display:"flex",gap:9,padding:9,overflow:"hidden"}}>
+      <div style={{flex:3,display:"flex",flexDirection:"column",gap:7}}>
+        <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:7}}>
+          {courts.map(ct=>{const m=ct.match;const el=elapsed[ct.id]||0;const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
+            return <div key={ct.id} style={{background:m?"#081810":"#060e18",borderRadius:11,border:`2px solid ${m?dc.color+"66":G.border}`,display:"flex",flexDirection:"column",padding:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}><span style={{fontSize:13,fontWeight:900,color:G.text}}>{ct.name}</span>{m&&<span style={{fontFamily:"monospace",fontSize:13,color:dc.color}}>{mm}:{ss}</span>}</div>
+              {m?<>
+                <div style={{padding:"4px 6px",borderRadius:7,background:G.accent+"10",border:`1px solid ${G.accent}30`,marginBottom:4}}>{(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,color:G.text}}>{safe(p.name)}</div>)}</div>
+                <div style={{textAlign:"center",fontSize:10,color:G.dim,margin:"2px 0"}}>VS</div>
+                <div style={{padding:"4px 6px",borderRadius:7,background:G.gold+"10",border:`1px solid ${G.gold}30`}}>{(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:10,color:G.text}}>{safe(p.name)}</div>)}</div>
+              </>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><div style={{fontSize:20,color:G.accent}}>🟢</div><div style={{fontSize:10,color:G.muted,marginTop:3}}>READY</div></div>}
+            </div>;})}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+          <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.blue}44`}}>
+            <div style={{fontSize:9,letterSpacing:3,color:G.blue,marginBottom:5}}>⚡ QUEUE ({queue.length})</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:10,color:G.text}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} vs {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
+              {!queue.length&&<div style={{color:G.dim,fontSize:10}}>Queue trống</div>}
+            </div>
+          </div>
+          <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
+            <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
+            <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+              {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
+            </div>
+          </div>
         </div>
       </div>
-      <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
-        <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
-        <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
-          {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
-        </div>
+      <div style={{flex:1,display:"flex",flexDirection:"column"}}>
+        <Minigames />
       </div>
     </div>
   </div>;
