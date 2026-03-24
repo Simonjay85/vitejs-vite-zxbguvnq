@@ -1493,16 +1493,6 @@ function ViewerMode({me,players,courts,history,queue,elapsed,events,activeEventI
                const playingIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
                const queuedIds=new Set(queue.flatMap(q=>[...(q.team1||[]),...(q.team2||[])].filter(Boolean).map(p=>p.id)));
                return players.filter(p=>p?.checkedIn&&!playingIds.has(p.id)&&p.name).sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=>{
-                 const isMe = me?.id === p.id;
-                 return <div key={p.id} style={{padding:"6px 10px",borderRadius:6,background:isMe?"#00c9a722":G.card,border:isMe?`1px solid #00c9a7`:`1px solid ${G.border}`,fontSize:11,display:"flex",gap:6,alignItems:"center"}}>
-                   <span style={{color:p.gender==="M"?"#60a5fa":"#f472b6"}}>{p.gender==="M"?"♂":"♀"}</span>
-                   <span style={{color:isMe?"#00c9a7":G.text,fontWeight:700}}>{safe(p.name)}</span>
-                   <span style={{fontSize:9,padding:"1px 4px",borderRadius:3,background:SKILL_COLOR[p.skill]+"25",color:SKILL_COLOR[p.skill]}}>{p.skill}</span>
-                   {me?.isPlayer && !isMe && !queuedIds.has(me.id) && !queuedIds.has(p.id) && (
-                     <button onClick={()=>{
-                       setChallenging({partner: null, opp1: p, opp2: null});
-                     }} style={{marginLeft:4, padding:"3px 8px", borderRadius:4, background:"#f43f5e22", border:"1px solid #f43f5e", color:"#f43f5e", fontSize:9, fontWeight:700, cursor:"pointer"}}>⚔️ Thách đấu</button>
-                   )}
                  </div>
                });
             })()}
