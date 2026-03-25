@@ -17,32 +17,33 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
   <style>*{box-sizing:border-box;margin:0;padding:0;}
-body{background:#0B0F14;font-family:'Inter',system-ui,-apple-system,sans-serif;}
+body{background:#0B0F14;color:#E8EFF8;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 :root{
   --primary:#00FFB2;
   --bg:#0B0F14;
-  --panel:#111720;
-  --card:#161D2B;
-  --border:#1E2A3A;
+  --panel:rgba(17, 23, 32, 0.85);
+  --card:rgba(22, 29, 43, 0.9);
+  --border:rgba(30, 42, 58, 0.7);
   --text:#E8EFF8;
-  --muted:#4A5568;
+  --muted:#64748B;
   --dim:#1A2332;
 }
-::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:#1E2A3A;border-radius:4px;}
-input,select,textarea{font-family:inherit;}
-button{font-family:inherit;}
-.hscroll::-webkit-scrollbar{height:3px;}
-.hscroll::-webkit-scrollbar-thumb{background:#1E2A3A;}
-@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,255,178,0.3);}50%{box-shadow:0 0 12px 4px rgba(0,255,178,0.15);}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
-.card-float{box-shadow:0 4px 24px rgba(0,0,0,0.4),0 1px 4px rgba(0,0,0,0.2);}
-.btn-neon{transition:all .15s ease;}
-.btn-neon:hover{filter:brightness(1.1);box-shadow:0 0 16px rgba(0,255,178,0.25);}
-.btn-outline{transition:all .15s ease;}
-.btn-outline:hover{background:rgba(0,255,178,0.08)!important;border-color:#00FFB2!important;color:#00FFB2!important;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2);}
+input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;box-shadow:0 0 0 3px rgba(0,255,178,0.15)!important;outline:none;}
+button{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden;}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.15);box-shadow:0 6px 16px -4px rgba(0,0,0,0.4);}
+button:active:not(:disabled){transform:translateY(1px);filter:brightness(0.95);box-shadow:none;}
+button:disabled{opacity:0.5;cursor:not-allowed;filter:saturate(0.5);}
+.hscroll::-webkit-scrollbar{height:4px;}
+.hscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);}
+@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,255,178,0.4);}50%{box-shadow:0 0 16px 6px rgba(0,255,178,0.25);}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px);filter:blur(4px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
+.card-float{background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.05);}
 </style>
   <!-- React 18 -->
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -324,12 +325,11 @@ function buildSeed(dbPlayers){
 const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:"PICKLE"});
 
 // ── DESIGN TOKENS
-// ── DESIGN TOKENS
-const G={bg:"#0B0F14",panel:"#111720",card:"#161D2B",border:"#1E2A3A",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#A78BFA",pink:"#F472B6",text:"#E8EFF8",muted:"#4A5568",dim:"#1A2332",win:"#22C55E",lose:"#EF4444"};
-const iS={background:G.card,border:`1px solid ${G.border}`,borderRadius:16,padding:"clamp(10px, 1.2vw, 14px) clamp(13px, 1.5vw, 16px)",color:G.text,fontSize:"clamp(13px, 1.2vw, 16px)",outline:"none",width:"100%",boxSizing:"border-box",transition:"border-color .15s"};
-const bP={padding:"clamp(10px, 1.2vw, 14px) clamp(16px, 2vw, 24px)",borderRadius:16,border:"none",background:G.accent,color:"#0B0F14",fontWeight:800,cursor:"pointer",fontSize:"clamp(13px, 1.1vw, 15px)",letterSpacing:.3,transition:"all .15s ease"};
-const bS={padding:"clamp(8px, 1vw, 12px) clamp(14px, 1.5vw, 20px)",borderRadius:14,border:`1px solid ${G.border}`,background:"transparent",color:G.text,fontWeight:700,cursor:"pointer",fontSize:"clamp(12px, 1.1vw, 14px)",transition:"all .15s ease",display:"inline-flex",alignItems:"center",justifyContent:"center"};
-const bR={padding:"6px 10px",borderRadius:10,border:`1px solid ${G.red}55`,background:"transparent",color:G.red,fontWeight:700,cursor:"pointer",fontSize:"clamp(11px, 1vw, 13px)",transition:"all .15s ease"};
+const G={bg:"#0B0F14",panel:"rgba(17, 23, 32, 0.85)",card:"rgba(22, 29, 43, 0.9)",border:"rgba(30, 42, 58, 0.7)",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#A78BFA",pink:"#F472B6",text:"#E8EFF8",muted:"#64748B",dim:"#1A2332",win:"#22C55E",lose:"#EF4444"};
+const iS={background:G.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 16px",color:G.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"};
+const bP={padding:"12px 24px",borderRadius:12,border:"none",background:`linear-gradient(135deg, ${G.accent}, #00cc8e)`,color:"#0B0F14",fontWeight:800,cursor:"pointer",fontSize:14,letterSpacing:0.5,boxShadow:"0 4px 12px rgba(0,255,178,0.2)"};
+const bS={padding:"11px 20px",borderRadius:12,border:`1px solid rgba(255,255,255,0.15)`,background:"rgba(255,255,255,0.03)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+const bR={padding:"8px 14px",borderRadius:10,border:`1px solid ${G.red}66`,background:"rgba(239, 68, 68, 0.05)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:12};
 
 // ── ATOMS
 const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
