@@ -17,34 +17,34 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
   <style>*{box-sizing:border-box;margin:0;padding:0;}
-body{background:#0B1320;color:#f8fafc;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+body{background:#F3F4F6;color:#1F2937;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 :root{
-  --primary:#00FFB2;
-  --bg:#0B1320;
-  --panel:#0E1624;
-  --card:rgba(0, 0, 0, 0.25);
-  --border:#1E293B;
-  --text:#F8FAFC;
-  --muted:#64748B;
-  --dim:#1e293b;
+  --primary:#5B4A9A;
+  --bg:#F3F4F6;
+  --panel:#FFFFFF;
+  --card:#FFFFFF;
+  --border:#E5E7EB;
+  --text:#1F2937;
+  --muted:#6B7280;
+  --dim:#d1d5db;
 }
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:6px;}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2);}
-input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);-webkit-appearance:none;appearance:none;}
-input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;box-shadow:0 0 0 3px rgba(0,255,178,0.15)!important;outline:none;}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.1);border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.2);}
+input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);-webkit-appearance:none;appearance:none;color:#1F2937;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:8px;}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;box-shadow:0 0 0 3px rgba(91,74,154,0.15)!important;outline:none;}
 button{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden;-webkit-appearance:none;appearance:none;}
-button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.15);box-shadow:0 8px 20px -4px rgba(0,0,0,0.4);}
-button:active:not(:disabled){transform:translateY(1px);filter:brightness(0.95);box-shadow:none;}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(0.95);box-shadow:0 8px 20px -4px rgba(0,0,0,0.1);}
+button:active:not(:disabled){transform:translateY(1px);filter:brightness(1.05);box-shadow:none;}
 button:disabled{opacity:0.5;cursor:not-allowed;filter:saturate(0.5);}
 .hscroll::-webkit-scrollbar{height:4px;}
-.hscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);}
-@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,255,178,0.4);}50%{box-shadow:0 0 20px 8px rgba(0,255,178,0.3);}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(12px);filter:blur(4px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
-.card-float{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
-.glass-inner{background:var(--card);border:1px solid rgba(255,255,255,0.03);border-radius:12px;}
+.hscroll::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);}
+@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(91,74,154,0.2);}50%{box-shadow:0 0 15px 5px rgba(91,74,154,0.15);}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);filter:blur(2px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
+.card-float{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.06);}
+.glass-inner{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.02);}
 </style>
   <!-- React 18 -->
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -334,7 +334,28 @@ function buildSeed(dbPlayers){
 const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:genCode()});
 
 // ── DESIGN TOKENS
-const G={bg:"#0B1320",panel:"#0E1624",card:"rgba(0, 0, 0, 0.2)",border:"#1E293B",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#8B5CF6",pink:"#F472B6",text:"#FFFFFF",muted:"#64748B",dim:"#1E293B",win:"#00FFB2",lose:"#EF4444"};
+const G={
+  bg:"#F3F4F6",         // Nền gốc (Xám nhạt)
+  panel:"#FFFFFF",      // Lớp App Container & Thẻ chính (Trắng)
+  card:"#FFFFFF",       // Lớp nền thẻ con (Trắng)
+  border:"#E5E7EB",     // Viền xám nhạt
+  accent:"#5B4A9A",     // Tím đậm thương hiệu
+  lightAccent:"#EBE5FF",// Tím mờ highlight check-in
+  blue:"#3B82F6",
+  gold:"#F59E0B",
+  red:"#EF4444",
+  lightRed:"#FEE2E2",   // Sân live nền đỏ nhạt
+  purple:"#5B4A9A",
+  pink:"#F472B6",
+  text:"#1F2937",       // Chữ đen
+  muted:"#6B7280",      // Chữ xám
+  dim:"#d1d5db",
+  mint:"#6FF2A4",       // Xanh bạc hà cho thẻ nút & sân trống
+  lightMint:"#D1F4E0",  // Sân trống (nền mờ)
+  coral:"#FFA9A0",      // Khối san hô QR checkin
+  win:"#10B981",
+  lose:"#EF4444"
+};
 const iS={background:G.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 20px",color:G.text,fontSize:15,outline:"none",width:"100%",boxSizing:"border-box",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.2)"};
 const bP={padding:"14px 26px",borderRadius:12,border:"none",background:`linear-gradient(135deg, #00FFB2, #00E39B)`,color:"#030712",fontWeight:800,cursor:"pointer",fontSize:15,letterSpacing:0.5,boxShadow:"0 4px 14px rgba(0,255,178,0.25)"};
 const bS={padding:"12px 22px",borderRadius:12,border:`1px solid ${G.border}`,background:"rgba(255, 255, 255, 0.05)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
@@ -598,8 +619,8 @@ function Login({accounts,players,onLogin,loading}){
   };
 
   // Viewer: luôn fetch Firebase để lấy viewerCode mới nhất
-  const tryViewer=async()=>{
-    const inputCode=safe(code).trim().toUpperCase();
+  const tryViewer=async(overrideCode)=>{
+    const inputCode=safe(typeof overrideCode==='string'?overrideCode:code).trim().toUpperCase();
     if(!inputCode){setErr("Nhập mã truy cập");return;}
     setChecking(true);setErr("");
     try{
@@ -839,6 +860,69 @@ function ScoreModal({match,onConfirm,onClose}){
 }
 
 
+// ── PLAYER SELF EDIT MODAL (for ViewerMode)
+function PlayerSelfEditModal({player,onSave,onClose,toast}){
+  const [f,setF]=useState({name:player.name||"",gender:player.gender||"M",skill:player.skill||"3.0",dtype:player.dtype||"any",partnerPref:player.partnerPref||"",avatarImg:player.avatarImg||null,avatarColor:player.avatarColor||null});
+  const [busy,setBusy]=useState(false);
+  const handleUpload=(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    if(file.size>2*1024*1024){alert("Ảnh quá lớn (nên dưới 2MB)");return;}
+    const r=new FileReader();
+    r.onload=(ev)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement("canvas");
+        let w=img.width,h=img.height;
+        if(w>200){h=Math.floor(h*(200/w));w=200;}
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+        setF(x=>({...x,avatarImg:canvas.toDataURL("image/jpeg",0.6)}));
+      };
+      img.src=ev.target.result;
+    };
+    r.readAsDataURL(file);
+  };
+  const save=()=>{
+    setBusy(true);
+    let upd = {...player, ...f};
+    if(f.skill!==player.skill){
+      upd.pendingSkill=f.skill;
+      upd.skill=player.skill;
+    }
+    onSave(upd);
+    toast("Cập nhật thành công!");
+    onClose();
+  };
+  return <MBox onClose={onClose} title="CẬP NHẬT HỒ SƠ" width={380}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:20}}>
+      <PlayerAvatar name={f.name} size={90} avatarImg={f.avatarImg} color={f.avatarColor}/>
+      <label style={{marginTop:12,padding:"6px 14px",background:G.accent,color:"#000",borderRadius:20,fontSize:12,fontWeight:800,cursor:"pointer"}}>
+        📸 Chụp / Tải Avatar
+        <input type="file" accept="image/*" capture="user" style={{display:"none"}} onChange={handleUpload}/>
+      </label>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <Fld label="Tên hiển thị"><input value={f.name} onChange={e=>setF({...f,name:e.target.value})} style={iS}/></Fld>
+      <div style={{display:"flex",gap:12}}>
+        <div style={{flex:1}}><Fld label="Giới tính"><select value={f.gender} onChange={e=>setF({...f,gender:e.target.value})} style={iS}><option value="M">Nam (M)</option><option value="F">Nữ (F)</option></select></Fld></div>
+        <div style={{flex:1}}><Fld label="Sở trường"><select value={f.dtype} onChange={e=>setF({...f,dtype:e.target.value})} style={iS}><option value="any">Cả hai</option><option value="double">Đôi</option><option value="single">Đơn</option></select></Fld></div>
+      </div>
+      <Fld label="Yêu cầu lên/xuống trình (Chờ Duyệt)">
+        <select value={f.skill} onChange={e=>setF({...f,skill:e.target.value})} style={iS}>{Object.keys(SC).map(k=><option key={k} value={k}>{k}</option>)}</select>
+        {(f.skill!==player.skill||player.pendingSkill)&&<div style={{fontSize:10,color:G.gold,marginTop:4,fontWeight:600}}>⚠️ Sẽ được cập nhật lên {f.skill!==player.skill?f.skill:player.pendingSkill} sau khi Host duyệt.</div>}
+      </Fld>
+      <Fld label="Thích đánh cặp với (Tên)"><input value={f.partnerPref} onChange={e=>setF({...f,partnerPref:e.target.value})} placeholder="Vd: Nguyễn Văn A..." style={iS}/></Fld>
+    </div>
+    <div style={{display:"flex",gap:8,marginTop:20}}>
+      <button onClick={save} disabled={busy||!f.name.trim()} style={{...bP,flex:1,opacity:!f.name.trim()?.5:1}}>{busy?"Đang lưu...":"💾 Lưu"}</button>
+      <button onClick={onClose} style={bS}>Huỷ</button>
+    </div>
+  </MBox>;
+}
+
+
 function EditPlayerModal({player,onSave,onClose,toast,history}) {
   const [f,setF]=useState({name:player.name||"",gender:player.gender||"M",skill:player.skill||"3.0",
     phone:player.phone||"",note:player.note||"",dtype:player.dtype||"any",
@@ -885,6 +969,13 @@ function EditPlayerModal({player,onSave,onClose,toast,history}) {
       <Fld label="GIỚI TÍNH"><div style={{display:"flex",gap:8}}>{[{v:"M",l:"♂ Nam",c:"#60a5fa"},{v:"F",l:"♀ Nữ",c:"#f472b6"}].map(g=><button key={g.v} onClick={()=>sf("gender",g.v)} style={{flex:1,padding:"10px 0",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,border:`2px solid ${f.gender===g.v?g.c:G.border}`,background:f.gender===g.v?g.c+"25":"transparent",color:f.gender===g.v?g.c:G.muted}}>{g.l}</button>)}</div></Fld>
       <Fld label="TRÌNH ĐỘ"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5}}>{SKILL_LEVELS.map(s=>{const c=SKILL_COLOR[s];const sel=f.skill===s;return <button key={s} onClick={()=>sf("skill",s)} style={{padding:"8px 2px",borderRadius:7,cursor:"pointer",fontWeight:700,fontSize:11,textAlign:"center",border:`2px solid ${sel?c:G.border}`,background:sel?c+"28":"transparent",color:sel?c:G.muted}}>{s}</button>;})}</div></Fld>
     </div>
+    {player.pendingSkill&&<div style={{padding:"8px 12px",borderRadius:10,background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.3)",margin:"12px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div>
+        <div style={{fontSize:11,color:G.gold,fontWeight:700}}>⚠️ Yêu cầu đổi trình độ</div>
+        <div style={{fontSize:13,color:"#fff",fontWeight:900}}>{player.skill} ➡ {player.pendingSkill}</div>
+      </div>
+      <button onClick={()=>{sf("skill",player.pendingSkill);onSave({...player,...f,skill:player.pendingSkill,pendingSkill:null});toast("Đã duyệt trình mới!");onClose();}} style={{padding:"6px 12px",background:G.accent,color:"#000",borderRadius:8,border:"none",fontWeight:800,fontSize:11,cursor:"pointer"}}>✅ Phê Duyệt</button>
+    </div>}
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <Fld label="KIỂU ĐÔI"><div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:5}}>{DTYPE_OPT.map(d=>{const sel=f.dtype===d.val;return <button key={d.val} onClick={()=>sf("dtype",d.val)} style={{padding:"6px 2px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center",border:`2px solid ${sel?d.color:G.border}`,background:sel?d.color+"22":"transparent",color:sel?d.color:G.muted}}>{d.label}</button>;})}</div></Fld>
@@ -1629,7 +1720,10 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
           <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.04)",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid rgba(255,255,255,0.1)",fontSize:16,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>🚪</div>
         </div>
         {!isGuest?
-          <PlayerAvatar name={myPlayer?.name} size={48} avatarImg={myPlayer?.avatarImg} color={myPlayer?.avatarColor} style={{boxShadow:"0 8px 16px rgba(0,0,0,0.4)"}}/>
+          <div onClick={()=>onShowProfile(myPlayer)} style={{cursor:"pointer",position:"relative"}}>
+            <PlayerAvatar name={myPlayer?.name} size={48} avatarImg={myPlayer?.avatarImg} color={myPlayer?.avatarColor} style={{boxShadow:"0 8px 16px rgba(0,0,0,0.4)"}}/>
+            <div style={{position:"absolute",bottom:-4,right:-4,background:G.gold,color:"#000",borderRadius:"50%",width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,boxShadow:"0 2px 4px rgba(0,0,0,0.5)"}}>✏️</div>
+          </div>
           :<div onClick={onLogout} style={{width:48,height:48,borderRadius:"50%",background:"#1E2A3A",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👁</div>
         }
       </div>
@@ -1666,17 +1760,17 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
       </div>
     )}
 
-    {/* HERO CARD (Your Stats) matching PicklePlay design */}
-    {!isGuest&&<div style={{margin:"12px 20px 24px",padding:"24px",borderRadius:28,background:`linear-gradient(135deg, ${G.blue}, #0F2027)`,boxShadow:"0 20px 40px rgba(59,130,246,0.25)",position:"relative",overflow:"hidden"}}>
+    {/* HERO CARD (Your Stats) matching Light/Purple Theme */}
+    {!isGuest&&<div style={{margin:"12px 20px 24px",padding:"24px",borderRadius:28,background:`linear-gradient(135deg, ${G.purple}, #3B2B6D)`,boxShadow:"0 12px 32px rgba(91,74,154,0.3)",position:"relative",overflow:"hidden"}}>
       {/* Abstract decorations */}
-      <div style={{position:"absolute",right:-30,top:-30,width:160,height:160,borderRadius:"50%",background:"linear-gradient(135deg, rgba(0,255,178,0.3), transparent)"}}/>
+      <div style={{position:"absolute",right:-30,top:-30,width:160,height:160,borderRadius:"50%",background:"linear-gradient(135deg, rgba(255,255,255,0.1), transparent)"}}/>
       <div style={{position:"absolute",right:60,bottom:-60,width:120,height:120,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
       
       <div style={{position:"relative",zIndex:2}}>
         <div style={{fontSize:14,fontWeight:700,color:"rgba(255,255,255,0.8)",marginBottom:4}}>Chỉ số cá nhân</div>
         <div style={{display:"flex",alignItems:"baseline",gap:8}}>
           <div style={{fontSize:54,fontWeight:900,color:"#fff",letterSpacing:-1.5}}>{myPlayer?.elo||0}</div>
-          <div style={{fontSize:16,fontWeight:800,color:G.accent}}>ELO</div>
+          <div style={{fontSize:16,fontWeight:800,color:G.mint}}>ELO</div>
         </div>
         
         <div style={{display:"flex",alignItems:"flex-end",gap:12,marginTop:20}}>
@@ -1698,16 +1792,16 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
 
     {/* MY RECENT SCORES (not for guests) */}
     {!isGuest&&myHistory.length>0&&<div style={{margin:"10px 16px 0"}}>
-      <div style={{fontSize:10,fontWeight:800,color:G.muted,letterSpacing:2,marginBottom:8}}>📋 KẾT QUẢ GẦN ĐÂY CỦA BẠN</div>
+      <div style={{fontSize:11,fontWeight:800,color:G.purple,letterSpacing:1,marginBottom:8}}>■ KẾT QUẢ GẦN ĐÂY CỦA BẠN</div>
       <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4}}>
         {myHistory.map(h=>{
           const iT1=[...(h.team1||[])].some(p=>p?.id===me?.id);
           const won=(iT1&&h.winner===1)||(!iT1&&h.winner===2);
           const opp=(iT1?h.team2:h.team1).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+");
-          return <div key={h.id} style={{flexShrink:0,background:won?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.06)",border:`1px solid ${won?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.2)"}`,borderRadius:12,padding:"8px 12px",minWidth:110}}>
-            <div style={{fontSize:10,fontWeight:800,color:won?G.win:G.lose}}>{won?"🏆 WIN":"LOSE"}</div>
-            <div style={{fontSize:14,fontWeight:900,color:"#fff",margin:"2px 0"}}>{h.score||"?"}</div>
-            <div style={{fontSize:9,color:G.muted}}>vs {opp}</div>
+          return <div key={h.id} style={{flexShrink:0,background:G.lightAccent,borderRadius:12,padding:"8px 12px",minWidth:110}}>
+            <div style={{fontSize:10,fontWeight:800,color:won?G.win:G.lose}}>{won?"🏆 WIN":"LOSS"}</div>
+            <div style={{fontSize:16,fontWeight:900,color:G.purple,margin:"2px 0"}}>{h.score||"?"}</div>
+            <div style={{fontSize:10,color:G.muted,fontWeight:600}}>vs {opp}</div>
           </div>;
         })}
       </div>
@@ -1775,15 +1869,14 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
       </div>}
     </main>
 
-    {/* Floating Pill Bottom Nav similar to ClutchTime */}
-    <nav style={{position:"fixed",bottom:Math.max(20, window.innerHeight<800?12:24),left:"50%",transform:"translateX(-50%)",zIndex:300,background:"#1A212E",borderRadius:40,border:"1px solid #2A3648",padding:"6px 12px",boxShadow:"0 12px 32px rgba(0,0,0,0.6)"}}>
-      <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6}}>
+    {/* Floating Pill Bottom Nav with Light Theme */}
+    <nav style={{position:"fixed",bottom:Math.max(20, window.innerHeight<800?12:24),left:"50%",transform:"translateX(-50%)",zIndex:300,background:"rgba(255,255,255,0.95)",backdropFilter:"blur(16px)",borderRadius:32,border:"1px solid rgba(0,0,0,0.05)",padding:"6px 16px",boxShadow:"0 8px 32px rgba(91,74,154,0.15)",display:"flex",gap:8}}>
         {VTABS.map(t=>(
-          <button key={t.id} onClick={()=>setVtab(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"8px",width:(vtab===t.id?48:42),height:42,borderRadius:"50%",border:"none",cursor:"pointer",background:vtab===t.id?"#FFFFFF":"transparent",color:vtab===t.id?"#0B0F14":"#8A96AA",transition:"all .25s cubic-bezier(0.4, 0, 0.2, 1)"}}>
-            <div style={{fontSize:18}}>{t.icon}</div>
+          <button key={t.id} onClick={()=>setVtab(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",width:54,height:48,borderRadius:16,border:"none",cursor:"pointer",background:vtab===t.id?G.purple:"transparent",color:vtab===t.id?"#FFF":"#6B7280",transition:"all .2s"}}>
+            <div style={{fontSize:18,marginBottom:2,transform:vtab===t.id?"scale(1.1)":"scale(1)",transition:"transform .2s"}}>{t.icon}</div>
+            <div style={{fontSize:9,fontWeight:800,whiteSpace:"nowrap"}}>{t.l}</div>
           </button>
         ))}
-      </div>
     </nav>
   </div>;
 }
@@ -2113,11 +2206,19 @@ function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
 function PlayerPayRow({p,perPerson,onToggle,onMethod,onAmount}){
   const [editing,setEditing]=useState(false);
   const [customAmt,setCustomAmt]=useState(p.paidAmount||perPerson);
+  const [showBill,setShowBill]=useState(false);
   return <div style={{borderRadius:10,background:G.card,border:`1px solid ${p.paid?"#34d39944":G.gold+"33"}`,overflow:"hidden"}}>
+    {showBill&&<div style={{position:"fixed",inset:0,zIndex:999,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowBill(false)}>
+      <img src={p.paymentInfo?.bill} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12,border:`2px solid ${G.accent}`}} alt="Bill"/>
+      <button style={{position:"fixed",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:"50%",fontSize:18,cursor:"pointer"}} onClick={()=>setShowBill(false)}>✕</button>
+    </div>}
     <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px"}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
-        <div style={{fontSize:10,color:G.muted}}>{p.skill} · {p.gender==="M"?"Nam":"Nữ"}</div>
+        <div style={{fontSize:10,color:G.muted,display:"flex",alignItems:"center",flexWrap:"wrap",gap:4}}>
+          {p.skill} · {p.gender==="M"?"Nam":"Nữ"}
+          {p.paymentInfo?.bill&&<span onClick={e=>{e.stopPropagation();setShowBill(true);}} style={{padding:"2px 6px",background:"rgba(0,255,178,0.1)",color:G.accent,borderRadius:4,fontSize:9,cursor:"pointer",border:`1px solid ${G.accent}44`}}>🖼️ Xem Bill</span>}
+        </div>
       </div>
       <div style={{fontSize:12,fontWeight:700,color:G.muted,flexShrink:0}}>{(p.paidAmount||perPerson).toLocaleString("vi-VN")}đ</div>
       <button onClick={onToggle} style={{padding:"5px 11px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:11,
@@ -2263,7 +2364,7 @@ function MatchReadyOverlay({notif,me,onReady,onNotReady}){
 
 
 
-function DashTab({courts,players,queue,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent,matchNotifs,onStartMatch}){
+function DashTab({courts,players,queue,history,elapsed,available,next,onScore,onAssign,genQ,autoAss,onCustom,onQR,activeEvent,matchNotifs,onStartMatch,onEditEvent}){
   const ci=players.filter(p=>p?.checkedIn).length;
   const numCourts=courts.length;
   const liveCount=courts.filter(c=>c.match).length;
@@ -2282,6 +2383,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
       <span style={{fontSize:12,fontWeight:800,color:G.accent}}>🗓️ {activeEvent.name}</span>
       {activeEvent.location&&<span style={{fontSize:10,color:G.muted}}>📍 {activeEvent.location}</span>}
       <span style={{fontSize:10,color:G.muted,marginLeft:"auto"}}>{activeEvent.date}</span>
+      <button onClick={onEditEvent} style={{padding:"4px 8px",background:"transparent",border:`1px solid ${G.accent}`,color:G.accent,borderRadius:6,fontSize:10,cursor:"pointer",fontWeight:800}}>✏️ Sửa</button>
     </div>}
 
     {/* Stats grid — 3 cột trên mobile, 6 trên desktop */}
@@ -3415,9 +3517,15 @@ function App(){
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
     {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts} onSaveAccounts={newAcc=>saveAll({accounts:newAcc})}/>}
     {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts}/>}
+    {modal==="editEvent"&&activeEvent&&<EventModal isNew={false} event={activeEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts} onSave={ev=>{
+      const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);
+      setEvents(newEvs);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,events:newEvs});
+      showT("Đã cập nhật Event");setModal(null);
+    }}/>}
     {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
     {subCourt&&<SubModal court={subCourt} players={players} playIds={playIds} onSub={subPlayer} onClose={()=>setSubCourt(null)}/>}
-    {editingPlayer&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
+    {editingPlayer&&mode==="viewer"&&<PlayerSelfEditModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
+    {editingPlayer&&mode!=="viewer"&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT} history={history}/>}
     {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)} activeEvent={activeEvent}/>}
 
     {/* HEADER — compact mobile */}
@@ -3514,7 +3622,7 @@ function App(){
 
     {/* MAIN CONTENT */}
     <main className="main-pad" style={{padding:"10px 12px",maxWidth:1800,margin:"0 auto"}}>
-      {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent} matchNotifs={matchNotifs} onStartMatch={handleStartMatch}/>}
+      {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent} matchNotifs={matchNotifs} onStartMatch={handleStartMatch} onEditEvent={()=>setModal("editEvent")}/>}
       {tab==="courts"     &&<div>
         {activeEvent?.gameMode&&activeEvent.gameMode!=="normal"&&(()=>{const gm=GAME_MODES.find(m=>m.val===activeEvent.gameMode);return <div style={{padding:"8px 14px",borderRadius:9,background:activeEvent.gameMode==="king"?G.gold+"14":G.purple+"14",border:`1px solid ${activeEvent.gameMode==="king"?G.gold:G.purple}44`,marginBottom:10,display:"flex",alignItems:"center",gap:9}}>
           <span style={{fontSize:18}}>{gm?.label.split(" ")[0]}</span>
