@@ -1,58 +1,4 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
-  <meta name="theme-color" content="#00c9a7"/>
-  <meta name="mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="PB Check In"/>
-  <link rel="manifest" href="/manifest.json"/>
-  <link rel="apple-touch-icon" href="/icons/icon-152.png"/>
-  <title>Check In 🏓 Pickleball</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-    body{background:#0B0F14;color:#E8EFF8;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-    input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);-webkit-appearance:none;appearance:none;}
-    input:focus,select:focus,textarea:focus{border-color:#00FFB2!important;box-shadow:0 0 0 3px rgba(0,255,178,0.15)!important;outline:none;}
-    button{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden;-webkit-appearance:none;appearance:none;}
-    button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.15);box-shadow:0 6px 16px -4px rgba(0,0,0,0.4);}
-    button:active:not(:disabled){transform:translateY(1px);filter:brightness(0.95);box-shadow:none;}
-    button:disabled{opacity:0.5;cursor:not-allowed;filter:saturate(0.5);}
-  </style>
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-    import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
-    const CFG={apiKey:"AIzaSyASueh9zAWlvffRyADA_vJXU8P8uwNJlV4",authDomain:"pickleballhost-8bca7.firebaseapp.com",databaseURL:"https://pickleballhost-8bca7-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"pickleballhost-8bca7",storageBucket:"pickleballhost-8bca7.firebasestorage.app",messagingSenderId:"864752070261",appId:"1:864752070261:web:342f9cdee8f5df0d38523c"};
-    const db=getDatabase(initializeApp(CFG));
-    const dbRef=ref(db,"pickleball/data");
-    window.FB={
-      async load(){try{const s=await get(dbRef);return s.exists()?s.val():null;}catch(e){console.warn(e);return null;}},
-      async save(d){try{await set(dbRef,{...d,_updatedAt:Date.now()});return true;}catch(e){console.warn(e);return false;}},
-      subscribe(cb){return onValue(dbRef,s=>{if(s.exists())cb(s.val());})}
-    };
-    (async()=>{
-      try{window.__data=await window.FB.load();console.log('Data:',window.__data?'OK':'empty');}
-      catch(e){console.warn(e);window.__data=null;}
-      window._fbOK=true;
-      document.dispatchEvent(new Event('fb-ok'));
-    })();
-  </script>
-</head>
-<body>
-<div id="loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;">
-  <div style="font-size:52px">🏓</div>
-  <div style="color:#4a6480;font-size:13px;letter-spacing:2px;font-family:sans-serif">ĐANG KẾT NỐI...</div>
-</div>
-<div id="root" style="display:none"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<!-- QRCode generator -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="text/babel" data-presets="react">
+
 const {useState,useEffect,useRef}=React;
 const G={bg:"#0B1320",panel:"#0E1624",card:"rgba(0, 0, 0, 0.2)",border:"#1E293B",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#8B5CF6",pink:"#F472B6",text:"#FFFFFF",muted:"#64748B",dim:"#1E293B"};
 const SKILLS=["2.0","2.5","3.0","3.5","3.5+"];
@@ -65,7 +11,7 @@ const safe=v=>(v&&typeof v==="string")?v:"";
 const sElo=s=>(SE[s]||1200)+Math.floor(Math.random()*60-30);
 const iS=(ex={})=>({background:G.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 20px",color:G.text,fontSize:15,width:"100%",boxSizing:"border-box",...ex});
 const bP=(ex={})=>({padding:"14px 26px",borderRadius:12,border:"none",background:`linear-gradient(135deg, #00FFB2, #00E39B)`,color:"#030712",fontWeight:800,fontSize:15,width:"100%",boxShadow:"0 4px 14px rgba(0,255,178,0.25)",...ex});
-const bO={padding:"12px 22px",borderRadius:12,border:`1px solid ${G.border}`,background:"rgba(255, 255, 255, 0.05)",color:G.text,fontWeight:700,fontSize:14,flexShrink:0};
+const bO={padding:"12px 22px",borderRadius:12,border:`1px solid ${G.border}`,background:"rgba(255, 255, 255, 0.05)",color:G.text,fontWeight:700,fontSize:14,flexShrink:0,...ex};
 const Lbl=({t})=><div style={{fontSize:10,color:G.muted,fontWeight:700,letterSpacing:1.5,marginBottom:8}}>{t}</div>;
 
 // ── QR Code component — tự sinh từ URL hiện tại
@@ -136,9 +82,7 @@ function App(){
     setBusy(true);setErr("");
     try{
       const fresh=await window.FB.load();
-      let all=fresh?.players||[];
-      const hasAlpha = /[A-Za-z]/;
-      all = all.map(p => (p.viewerCode && hasAlpha.test(p.viewerCode)) ? { ...p, viewerCode: String(Math.floor(100000 + Math.random() * 900000)) } : p);
+      const all=fresh?.players||[];
       const ex=all.find(p=>safe(p.name).toLowerCase()===form.name.trim().toLowerCase());
       if(ex?.checkedIn){setResult(ex);setStep("already");setBusy(false);return;}
       const now=new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
@@ -159,27 +103,48 @@ function App(){
   const reset=()=>{setStep("name");setSearch("");setMatched(null);setResult(null);setErr("");setPayMode(null);setForm({name:"",gender:"M",skill:"3.0",dtype:"any",billBase64:null});};
 
   return(
-  <div style={{minHeight:"100vh",background:G.bg,color:G.text,padding:"20px 16px 40px",display:"flex",justifyContent:"center"}}>
-  <div style={{display:"flex",gap:32,width:"100%",maxWidth:860,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+  <div style={{minHeight:"100vh",background:G.bg,color:G.text,padding:"20px 16px 40px"}}>
+  <div style={{maxWidth:480,margin:"0 auto"}}>
 
-    {/* TRÁI: FORM CHECKIN */}
-    <div style={{flex:"1 1 400px",maxWidth:480}}>
-      {/* Print styles — chỉ hiện QR khi in */}
-      <style>{`@media print{body>*{display:none!important;}#print-qr{display:block!important;}}`}</style>
-      <div id="print-qr" style={{display:"none",textAlign:"center",padding:40,fontFamily:"sans-serif"}}>
-        <div style={{fontSize:28,fontWeight:900,marginBottom:8}}>🏓 PICKLEBALL CHECK IN</div>
-        {activeEvent&&<div style={{fontSize:16,color:"#555",marginBottom:20}}>{activeEvent.name}</div>}
+    {/* QR MODAL */}
+    {showQR&&<div onClick={()=>setShowQR(false)} style={{position:"fixed",inset:0,background:"#000c",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:G.panel,borderRadius:24,padding:28,maxWidth:340,width:"100%",textAlign:"center",border:`2px solid ${G.accent}55`}}>
+        <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:4}}>📱 QR Check In</div>
+        <div style={{fontSize:11,color:G.muted,marginBottom:18}}>Player quét QR này để check in</div>
         <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
-          <div id="print-qr-canvas"/>
+          <QRBox url={checkinURL} size={200}/>
         </div>
-        <div style={{fontSize:14,color:"#333",marginBottom:8}}>Quét QR để check in</div>
-        <div style={{fontSize:12,color:"#888"}}>{checkinURL}</div>
+        <div style={{fontSize:10,color:G.muted,padding:"8px 12px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`,marginBottom:16,wordBreak:"break-all"}}>
+          {checkinURL}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{window.print();}} style={bP({flex:1,fontSize:13,padding:"11px"})}>🖨️ In QR</button>
+          <button onClick={()=>setShowQR(false)} style={{...bO,padding:"11px 16px"}}>Đóng</button>
+        </div>
       </div>
+    </div>}
 
-      {/* HEADER */}
-      <div style={{textAlign:"center",marginBottom:24}}>
-        <div style={{width:70,height:70,borderRadius:22,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:`0 8px 32px ${G.accent}50`}}>🏓</div>
-        <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1}}>CHECK IN</div>
+    {/* Print styles — chỉ hiện QR khi in */}
+    <style>{`@media print{body>*{display:none!important;}#print-qr{display:block!important;}}`}</style>
+    <div id="print-qr" style={{display:"none",textAlign:"center",padding:40,fontFamily:"sans-serif"}}>
+      <div style={{fontSize:28,fontWeight:900,marginBottom:8}}>🏓 PICKLEBALL CHECK IN</div>
+      {activeEvent&&<div style={{fontSize:16,color:"#555",marginBottom:20}}>{activeEvent.name}</div>}
+      <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
+        <div id="print-qr-canvas"/>
+      </div>
+      <div style={{fontSize:14,color:"#333",marginBottom:8}}>Quét QR để check in</div>
+      <div style={{fontSize:12,color:"#888"}}>{checkinURL}</div>
+    </div>
+
+    {/* HEADER */}
+    <div style={{textAlign:"center",marginBottom:24}}>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+        <button onClick={()=>setShowQR(true)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${G.accent}55`,background:G.accent+"12",color:G.accent,fontWeight:700,fontSize:12}}>
+          📱 Hiện QR
+        </button>
+      </div>
+      <div style={{width:70,height:70,borderRadius:22,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:`0 8px 32px ${G.accent}50`}}>🏓</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1}}>CHECK IN</div>
       {activeEvent
         ?<div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:7,padding:"5px 16px",borderRadius:20,background:G.accent+"18",border:`1px solid ${G.accent}44`}}>
           <span style={{width:7,height:7,borderRadius:"50%",background:G.accent,display:"inline-block",boxShadow:`0 0 6px ${G.accent}`}}/>
@@ -324,14 +289,6 @@ function App(){
         <span style={{fontSize:13,padding:"5px 13px",borderRadius:8,fontWeight:700,background:SC[result.skill]+"25",color:SC[result.skill]}}>Trình {result.skill}</span>
         {result.isNew&&<span style={{fontSize:13,padding:"5px 13px",borderRadius:8,fontWeight:700,background:G.gold+"25",color:G.gold}}>🆕 Người mới</span>}
       </div>
-      <div style={{padding:"14px 16px",borderRadius:12,background:G.bg,border:`2px dashed ${G.accent}55`,marginBottom:20}}>
-        <div style={{fontSize:12,color:G.accent,marginBottom:8,fontWeight:800}}>MÃ TRUY CẬP APP CỦA BẠN:</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:12}}>
-          <div style={{fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8}}>{result.viewerCode}</div>
-          <button onClick={(e)=>{const btn=e.currentTarget; navigator.clipboard.writeText(result.viewerCode); btn.innerText="✅ Đã copy!"; setTimeout(()=>btn.innerText="📋 Copy",2000);}} style={{...bO, borderColor:G.border, padding:"6px 12px", fontSize:12, background:G.card}}>📋 Copy</button>
-        </div>
-        <button onClick={()=>window.open("/", "_blank")} style={{...bO,borderColor:G.accent,color:G.accent,padding:"8px 16px",fontSize:13,width:"100%"}}>Vào App Cá Nhân 🏓</button>
-      </div>
       <div style={{padding:"14px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:22,fontSize:14,color:G.muted,lineHeight:1.7}}>
         ⏳ Bạn đã được thêm vào hàng chờ.<br/><span style={{color:G.text,fontWeight:600}}>Host sẽ xếp trận cho bạn sớm nhé!</span>
       </div>
@@ -352,14 +309,6 @@ function App(){
       <div style={{fontSize:18,fontWeight:800,color:G.gold,marginBottom:8}}>Đã check in rồi!</div>
       <div style={{fontSize:28,fontWeight:900,color:"#fff",marginBottom:8}}>{safe(result.name)}</div>
       <div style={{fontSize:13,color:G.muted,marginBottom:20}}>{result.skill} · {result.gender==="M"?"Nam":"Nữ"} · ELO {result.elo}</div>
-      <div style={{padding:"14px 16px",borderRadius:12,background:G.bg,border:`2px dashed ${G.gold}55`,marginBottom:20}}>
-        <div style={{fontSize:12,color:G.gold,marginBottom:8,fontWeight:800}}>MÃ TRUY CẬP APP CỦA BẠN:</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:12}}>
-          <div style={{fontSize:32,fontWeight:900,color:"#fff",letterSpacing:8}}>{result.viewerCode}</div>
-          <button onClick={(e)=>{const btn=e.currentTarget; navigator.clipboard.writeText(result.viewerCode); btn.innerText="✅ Đã copy!"; setTimeout(()=>btn.innerText="📋 Copy",2000);}} style={{...bO, borderColor:G.border, padding:"6px 12px", fontSize:12, background:G.card}}>📋 Copy</button>
-        </div>
-        <button onClick={()=>window.open("/", "_blank")} style={{...bO,borderColor:G.gold,color:G.gold,padding:"8px 16px",fontSize:13,width:"100%"}}>Vào App Cá Nhân 🏓</button>
-      </div>
       <div style={{padding:"13px 16px",borderRadius:12,background:G.card,border:`1px solid ${G.border}`,marginBottom:22,fontSize:14,color:G.muted,lineHeight:1.7}}>
         Bạn đã có trong hàng chờ rồi. 🏓<br/><span style={{color:G.text,fontWeight:600}}>Hãy chờ Host xếp trận nhé!</span>
       </div>
@@ -367,21 +316,6 @@ function App(){
     </div>}
 
     <div style={{textAlign:"center",marginTop:28,fontSize:10,color:G.dim,letterSpacing:1.5,fontWeight:600}}>🏓 PICKLEBALL SOCIAL · SEPC RATING</div>
-    </div>
-
-    {/* PHẢI: MÃ QR */}
-    <div style={{flex:"1 1 280px", maxWidth:340, background:G.panel, borderRadius:24, padding:28, textAlign:"center", border:`2px solid ${G.accent}55`, position:"sticky", top:20}}>
-      <div style={{fontSize:16,fontWeight:900,color:G.text,marginBottom:8}}>📱 Mã QR Check In</div>
-      <div style={{fontSize:12,color:G.muted,marginBottom:20,lineHeight:1.5}}>Người chơi có thể dùng điện thoại<br/>quét mã này để tự Check In</div>
-      <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
-        <QRBox url={checkinURL} size={220}/>
-      </div>
-      <div style={{fontSize:11,color:G.muted,padding:"10px",borderRadius:8,background:G.card,border:`1px solid ${G.border}`,marginBottom:16,wordBreak:"break-all",fontWeight:700}}>
-        {checkinURL}
-      </div>
-      <button onClick={()=>{window.print();}} style={bP({fontSize:14,padding:"12px"})}>🖨️ In mã QR này ra giấy</button>
-    </div>
-
   </div></div>);
 }
 
@@ -403,11 +337,3 @@ else{
     }
   },8000);
 }
-</script>
-  <script>
-    if('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(()=>{});
-    }
-  </script>
-</body>
-</html>

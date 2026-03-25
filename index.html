@@ -307,7 +307,15 @@ const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam",
 const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu","Tú Uyên","Diễm My","Cẩm Tú","Ánh Tuyết","Ngọc Hân"];
 function buildSeed(dbPlayers){
   // GIỮ NGUYÊN checkedIn từ DB — không reset về false
-  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p}));
+  if(dbPlayers?.length>0) {
+    const hasAlpha = /[A-Za-z]/;
+    return dbPlayers.map(p => {
+      if (p.viewerCode && hasAlpha.test(p.viewerCode)) {
+        return { ...p, viewerCode: String(Math.floor(100000 + Math.random() * 900000)) };
+      }
+      return {...p};
+    });
+  }
   let mi=0,fi=0;
   const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr()});
   const list=[
@@ -323,7 +331,7 @@ function buildSeed(dbPlayers){
   });
   return list.map(p=>({...p,wins:Math.round(p.gamesPlayed*rng(35,65)/100)}));
 }
-const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:"PICKLE"});
+const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:genCode()});
 
 // ── DESIGN TOKENS
 const G={bg:"#0B1320",panel:"#0E1624",card:"rgba(0, 0, 0, 0.2)",border:"#1E293B",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#8B5CF6",pink:"#F472B6",text:"#FFFFFF",muted:"#64748B",dim:"#1E293B",win:"#00FFB2",lose:"#EF4444"};
@@ -605,7 +613,7 @@ function Login({accounts,players,onLogin,loading}){
       if(matchPlayer) {
         onLogin({id:matchPlayer.id, name:matchPlayer.name, role:ROLES.VIEWER, password:"", isPlayer:true});
       }
-      else if(inputCode===freshCode||inputCode===localCode||inputCode==="123456"||inputCode==="PICKLE"){
+      else if(inputCode===freshCode||inputCode===localCode||inputCode==="123456"){
         onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""});
       } else {
         setErr("Mã truy cập không đúng");
@@ -617,7 +625,7 @@ function Login({accounts,players,onLogin,loading}){
         onLogin({id:matchPlayer.id, name:matchPlayer.name, role:ROLES.VIEWER, password:"", isPlayer:true});
       } else {
         const localCode=(accounts?.viewerCode||"123456").trim();
-        (inputCode===localCode||inputCode==="123456"||inputCode==="PICKLE")
+        (inputCode===localCode||inputCode==="123456")
           ?onLogin({id:"v_"+uid(),name:"Khán giả",role:ROLES.VIEWER,password:""})
           :setErr("Mã truy cập không đúng");
       }
@@ -655,7 +663,7 @@ function Login({accounts,players,onLogin,loading}){
         <div style={{fontSize:16,fontWeight:900,color:G.accent,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>👁 Vào xem trực tiếp</div>
         <div style={{fontSize:11,color:G.muted,marginBottom:20}}>Dùng mã cá nhân (sau check-in) hoặc mã chung do Host cấp</div>
         <Fld label="MÃ TRUY CẬP (SỐ)">
-          <input type="tel" pattern="[0-9]*" value={code} onChange={e=>{setCode(e.target.value.replace(/[^0-9A-Za-z]/g,''));setErr("");}} placeholder="VD: 123456" maxLength={6}
+          <input type="tel" pattern="[0-9]*" value={code} onChange={e=>{setCode(e.target.value.replace(/[^0-9]/g,''));setErr("");}} placeholder="VD: 123456" maxLength={6}
             style={{...iS,textAlign:"center",fontSize:26,fontWeight:900,letterSpacing:10,color:G.gold}} onKeyDown={e=>e.key==="Enter"&&tryViewer()}/>
         </Fld>
         {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,background:G.red+"12"}}>{err}</div>}
@@ -738,7 +746,7 @@ function AdminModal({accounts,setAccounts,me,onClose,toast,numCourts,setNumCourt
     {tab==="viewer"&&<>
       <div style={{textAlign:"center",padding:"16px 0"}}>
         <div style={{fontSize:11,color:G.muted,marginBottom:12}}>Chia sẻ mã này cho khán giả xem live</div>
-        <div style={{fontSize:44,fontWeight:900,letterSpacing:10,color:G.gold,padding:"16px 24px",borderRadius:14,background:G.gold+"12",border:`2px solid ${G.gold}44`,display:"inline-block",marginBottom:16}}>{accounts?.viewerCode||"PICKLE"}</div>
+        <div style={{fontSize:44,fontWeight:900,letterSpacing:10,color:G.gold,padding:"16px 24px",borderRadius:14,background:G.gold+"12",border:`2px solid ${G.gold}44`,display:"inline-block",marginBottom:16}}>{accounts?.viewerCode||"123456"}</div>
         <div style={{fontSize:10,color:G.muted,marginBottom:16}}>Màn login → "Xem trực tiếp" → nhập mã trên</div>
         {isSA&&<div><button onClick={regenCode} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>🔄 Tạo mã mới</button></div>}
       </div>
@@ -3453,7 +3461,7 @@ function App(){
         <button onClick={()=>setModal("couple")} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>💑 Cặp</button>
         <button onClick={()=>setTvMode(true)} style={{...bS,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>📺 TV</button>
         <div style={{padding:"4px 8px",borderRadius:7,background:G.gold+"12",border:`1px solid ${G.gold}33`,fontSize:9,color:G.gold,fontWeight:700,flexShrink:0,display:"flex",alignItems:"center",cursor:"pointer"}} onClick={()=>setModal("admin")}>
-          👁 {accounts?.viewerCode||"PICKLE"}
+          👁 {accounts?.viewerCode||"123456"}
         </div>
         <RBadge role={me.role}/>
         <button onClick={logout} style={{...bS,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7,color:G.red,border:`1px solid ${G.red}33`}}>← Xuất</button>
