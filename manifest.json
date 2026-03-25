@@ -1,7 +1,7 @@
 {
   "name": "Pickleball Social",
   "short_name": "Pickleball",
-  "description": "Hệ thống quản lý pickleball social - Kootoro Rating",
+  "description": "Hệ thống quản lý pickleball social - Sepc Rating",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

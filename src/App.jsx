@@ -25,7 +25,7 @@ const todayStr = () => new Date().toLocaleDateString("vi-VN",{weekday:"short",da
 const teamElo  = t => t?.length ? Math.round(t.reduce((s,p)=>s+(p?.elo||0),0)/t.length) : 0;
 const skillElo = s => (SKILL_ELO[s]||1200)+rng(-50,50);
 const safe     = v => (v&&typeof v==="string") ? v : "";
-const genCode  = () => Math.random().toString(36).slice(2,8).toUpperCase();
+const genCode  = () => String(Math.floor(100000 + Math.random() * 900000));
 
 // ── STORAGE ENGINE — lưu ngay lập tức từng phần riêng biệt
 const DB = {
@@ -42,7 +42,7 @@ const DB = {
   }
 };
 
-// ── KOOTORO
+// ── SEPC
 const getTier=(k)=>{
   if(k<0) return {name:"Hạng Chì", color:"#4a6480", next:0, prev:-50, icon:"⚙️"};
   if(k<15) return {name:"Đồng", color:"#cd7f32", next:15, prev:0, icon:"🥉"};
@@ -50,7 +50,7 @@ const getTier=(k)=>{
   if(k<70) return {name:"Vàng", color:"#ffd700", next:70, prev:35, icon:"🥇"};
   return {name:"Elite", color:"#00c9a7", next:null, prev:70, icon:"💎"};
 };
-function kootoro(player, history) {
+function sepc(player, history) {
   if(!player||!history) return 0;
   let k=0;
   history.forEach(h=>{
@@ -205,7 +205,7 @@ function Login({accounts,players,onLogin,loading}){
       <div style={{textAlign:"center",marginBottom:32}}>
         <div style={{width:64,height:64,borderRadius:18,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 12px"}}>🏓</div>
         <div style={{fontSize:22,fontWeight:900,color:"#fff",letterSpacing:2}}>PICKLEBALL SOCIAL</div>
-        <div style={{fontSize:11,color:G.muted,marginTop:4,letterSpacing:1.5}}>KOOTORO RATING SYSTEM</div>
+        <div style={{fontSize:11,color:G.muted,marginTop:4,letterSpacing:1.5}}>SEPC RATING SYSTEM</div>
       </div>
       {mode==="choose"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
         <button onClick={()=>{setMode("admin");setErr("");}} style={{...bP,padding:"16px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}><span>🎮</span> Đăng nhập Admin / Host</button>
@@ -523,7 +523,7 @@ function ViewerChallengeModal({me,players,onChallenge,onClose}){
 // ══════════════════════════════════════
 function PlayerProfileModal({p, history, onClose, isSA, onUpdatePlayer, toast}){
   if(!p) return null;
-  const k = Math.round(kootoro(p, history)*10)/10;
+  const k = Math.round(sepc(p, history)*10)/10;
   const tier = getTier(k);
   const wr = (p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed)*100):0;
   
@@ -557,7 +557,7 @@ function PlayerProfileModal({p, history, onClose, isSA, onUpdatePlayer, toast}){
 
      <div style={{background:G.card,borderRadius:12,padding:14,border:`1px solid ${G.border}`,marginBottom:16}}>
        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:G.dim,fontWeight:700,marginBottom:6}}>
-         <span>KOOTORO RATING</span>
+         <span>SEPC RATING</span>
          <span>{tier.next ? `${k} / ${tier.next}` : `${k} (MAX)`}</span>
        </div>
        <div style={{height:8,background:G.bg,borderRadius:4,overflow:"hidden"}}>
@@ -708,7 +708,7 @@ function HCard({h}){
 // TV MODE
 // ══════════════════════════════════════
 function TVMode({courts,elapsed,queue,players,history,onClose}){
-  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
+  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
   return <div style={{position:"fixed",inset:0,zIndex:800,background:"#000",display:"flex",flexDirection:"column"}}>
     <div style={{padding:"7px 16px",background:"#050d18",borderBottom:"2px solid #0c2040",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:G.accent}}>🏓 PICKLEBALL SOCIAL</span>
@@ -736,7 +736,7 @@ function TVMode({courts,elapsed,queue,players,history,onClose}){
             </div>
           </div>
           <div style={{background:"#080f1e",borderRadius:8,padding:"7px 11px",border:`1px solid ${G.gold}44`}}>
-            <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP KOOTORO</div>
+            <div style={{fontSize:9,letterSpacing:3,color:G.gold,marginBottom:5}}>🏆 TOP SEPC</div>
             <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
               {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:i===0?G.gold:G.dim,fontSize:10}}>#{i+1}</span><span style={{fontSize:11,color:G.text}}>{safe(p.name)}</span><span style={{fontSize:11,color:G.accent,fontWeight:800}}>{p.k>0?"+":""}{p.k}</span></div>)}
             </div>
@@ -756,7 +756,7 @@ function TVMode({courts,elapsed,queue,players,history,onClose}){
 function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,elapsed,events,activeEventId,onLogout,me,onShowProfile}){
   const [vtab,setVtab]=useState("courts");
   const [showChal,setShowChal]=useState(false);
-  const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k);
+  const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k);
   const VTABS=[{id:"courts",l:"🏟️ Sân Live"},{id:"leaderboard",l:"🏆 Xếp hạng"},{id:"queue",l:"⚔️ Queue"},{id:"events",l:"📅 Sự kiện"},{id:"history",l:"📋 Lịch sử"},{id:"analytics",l:"📈 Thống kê"}];
   const myPlayer = players.find(p => p.id === me?.id) || me;
   return <div style={{minHeight:"100vh",background:G.bg,color:G.text,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -772,7 +772,7 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
             <div style={{width:32,height:32,borderRadius:9,background:`linear-gradient(135deg,${G.purple},${G.pink})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>👤</div>
             <div>
               <div style={{fontWeight:900,fontSize:14,color:"#fff",display:"flex",alignItems:"center",gap:6}}>{safe(myPlayer?.name)} {myPlayer?.membership&&<span style={{fontSize:10}}>💎</span>}</div>
-              <div style={{fontSize:9,color:G.gold,fontWeight:800}}>ELO: {myPlayer?.elo||0} · Rate: {kootoro(myPlayer,history)} · {myPlayer?.wins||0}W / {myPlayer?.gamesPlayed||0}G</div>
+              <div style={{fontSize:9,color:G.gold,fontWeight:800}}>ELO: {myPlayer?.elo||0} · Rate: {sepc(myPlayer,history)} · {myPlayer?.wins||0}W / {myPlayer?.gamesPlayed||0}G</div>
             </div>
           </>
         )}
@@ -856,7 +856,7 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
 // ══════════════════════════════════════
 function LeaderView({ranked, onShowProfile}){
   return <div>
-    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Kootoro</div>
+    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Sepc</div>
     {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:16,justifyContent:"center",alignItems:"flex-end"}}>
       {[ranked[1],ranked[0],ranked[2]].filter(Boolean).map((p,pi)=>{
         const rank=pi===0?2:pi===1?1:3;const h=rank===1?120:rank===2?90:75;const c=rank===1?G.gold:rank===2?"#9ca3af":"#b87333";
@@ -872,7 +872,7 @@ function LeaderView({ranked, onShowProfile}){
     </div>}
     <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
       <div style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div>
+        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>SEPC</div>
       </div>
       {ranked.map((p,i)=>{
         const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0;
@@ -1157,8 +1157,8 @@ function KioskTab({players, onRegister, queue, courts, history}){
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><div style={{flex:1,height:1,background:G.border}}/><span style={{fontSize:12,color:G.dim}}>hoặc</span><div style={{flex:1,height:1,background:G.border}}/></div>
       <button onClick={()=>{setNameSearch("");setStep("form");}} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>✏️ Đăng ký mới</button>
       {history.length>0&&<div style={{marginTop:28,padding:"14px 16px",borderRadius:12,background:G.panel,border:`1px solid ${G.border}`}}>
-        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:10}}>🏆 TOP KOOTORO</div>
-        {[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,3).map((p,i)=>(
+        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:10}}>🏆 TOP SEPC</div>
+        {[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,3).map((p,i)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:i<2?6:0}}>
             <span style={{fontSize:14}}>{["🥇","🥈","🥉"][i]}</span>
             <span style={{fontSize:13,fontWeight:700,color:G.text,flex:1}}>{safe(p.name)}</span>
@@ -1338,14 +1338,14 @@ function DashTab({courts,players,queue,pendingChallenges,onApproveChallenge,onRe
 
 function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onShowProfile}){
   const [search,setSearch]=useState(""),[fG,setFG]=useState("all"),[fS,setFS]=useState("all");
-  const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("kootoro");
+  const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("sepc");
   let list=[...players].filter(p=>p?.name);
   const sq=safe(search).toLowerCase();
   if(sq)list=list.filter(p=>safe(p.name).toLowerCase().includes(sq));
   if(fG!=="all")list=list.filter(p=>p.gender===fG);if(fS!=="all")list=list.filter(p=>p.skill===fS);
   if(fSt==="in")list=list.filter(p=>p.checkedIn);else if(fSt==="out")list=list.filter(p=>!p.checkedIn);
   else if(fSt==="playing")list=list.filter(p=>playIds.has(p.id));else if(fSt==="couple")list=list.filter(p=>p.coupleId);
-  list.sort((a,b)=>{if(sort==="kootoro")return kootoro(b,history)-kootoro(a,history);if(sort==="elo")return(b.elo||0)-(a.elo||0);if(sort==="name")return safe(a.name).localeCompare(safe(b.name));return(b.gamesPlayed||0)-(a.gamesPlayed||0);});
+  list.sort((a,b)=>{if(sort==="sepc")return sepc(b,history)-sepc(a,history);if(sort==="elo")return(b.elo||0)-(a.elo||0);if(sort==="name")return safe(a.name).localeCompare(safe(b.name));return(b.gamesPlayed||0)-(a.gamesPlayed||0);});
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
       <div style={{fontSize:14,fontWeight:800,color:G.text}}>👥 Người chơi ({players.length})</div>
@@ -1360,14 +1360,14 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onShow
       <select value={fG} onChange={e=>setFG(e.target.value)} style={{...iS,maxWidth:80}}><option value="all">Tất cả</option><option value="M">♂ Nam</option><option value="F">♀ Nữ</option></select>
       <select value={fS} onChange={e=>setFS(e.target.value)} style={{...iS,maxWidth:100}}><option value="all">Mọi trình</option>{SKILL_LEVELS.map(s=><option key={s} value={s}>{s}</option>)}</select>
       <select value={fSt} onChange={e=>setFSt(e.target.value)} style={{...iS,maxWidth:115}}><option value="all">Tất cả</option><option value="in">✅ Check-in</option><option value="out">❌ Chưa vào</option><option value="playing">🔴 Đang đấu</option><option value="couple">💑 Couple</option></select>
-      <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="kootoro">↓ Kootoro</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
+      <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="sepc">↓ Sepc</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
     </div>
     <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
       <div style={{display:"grid",gridTemplateColumns:"150px 40px 50px 80px 45px 40px 42px 64px 60px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div>MÃ</div><div>ACTION</div>
+        <div>TÊN</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>SEPC</div><div>MÃ</div><div>ACTION</div>
       </div>
       {list.map((p,i)=>{
-        const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=Math.round(kootoro(p,history)*10)/10;
+        const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=Math.round(sepc(p,history)*10)/10;
         return <div key={p.id} style={{display:"grid",gridTemplateColumns:"150px 40px 50px 80px 45px 40px 42px 64px 60px 76px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
           <div onClick={()=>onShowProfile(p.id)} style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:3,cursor:"pointer"}}>
             {safe(p.name)}
@@ -1718,7 +1718,7 @@ export default function App(){
       </div>}
       {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onShowProfile={setProfileTarget}/>}
       {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
-      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)} onShowProfile={setProfileTarget}/>}
+      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k)} onShowProfile={setProfileTarget}/>}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}

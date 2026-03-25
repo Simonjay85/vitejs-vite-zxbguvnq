@@ -17,33 +17,34 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
   <style>*{box-sizing:border-box;margin:0;padding:0;}
-body{background:#0B0F14;color:#E8EFF8;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+body{background:#0B1320;color:#f8fafc;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 :root{
   --primary:#00FFB2;
-  --bg:#0B0F14;
-  --panel:rgba(17, 23, 32, 0.85);
-  --card:rgba(22, 29, 43, 0.9);
-  --border:rgba(30, 42, 58, 0.7);
-  --text:#E8EFF8;
+  --bg:#0B1320;
+  --panel:#0E1624;
+  --card:rgba(0, 0, 0, 0.25);
+  --border:#1E293B;
+  --text:#F8FAFC;
   --muted:#64748B;
-  --dim:#1A2332;
+  --dim:#1e293b;
 }
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:6px;}
 ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2);}
-input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);}
+input,select,textarea{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);-webkit-appearance:none;appearance:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;box-shadow:0 0 0 3px rgba(0,255,178,0.15)!important;outline:none;}
-button{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden;}
-button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.15);box-shadow:0 6px 16px -4px rgba(0,0,0,0.4);}
+button{font-family:inherit;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);position:relative;overflow:hidden;-webkit-appearance:none;appearance:none;}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.15);box-shadow:0 8px 20px -4px rgba(0,0,0,0.4);}
 button:active:not(:disabled){transform:translateY(1px);filter:brightness(0.95);box-shadow:none;}
 button:disabled{opacity:0.5;cursor:not-allowed;filter:saturate(0.5);}
 .hscroll::-webkit-scrollbar{height:4px;}
 .hscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);}
-@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,255,178,0.4);}50%{box-shadow:0 0 16px 6px rgba(0,255,178,0.25);}}
+@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,255,178,0.4);}50%{box-shadow:0 0 20px 8px rgba(0,255,178,0.3);}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(12px);filter:blur(4px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
-.card-float{background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.05);}
+.card-float{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+.glass-inner{background:var(--card);border:1px solid rgba(255,255,255,0.03);border-radius:12px;}
 </style>
   <!-- React 18 -->
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -221,7 +222,7 @@ const playerBadges = (p, history) => {
   const wins = recent.filter(h=>{const inT1=(h.team1||[]).some(x=>x?.id===p.id);return (inT1&&h.winner===1)||(!inT1&&h.winner===2);}).length;
   if(wins >= 3) badges.push({icon:"🔥", label:"Hot"});
   if((p.gamesPlayed||0) >= 10) badges.push({icon:"🏃", label:"Active"});
-  if((p.kootoro||0) > 50) badges.push({icon:"🧠", label:"Smart"});
+  if((p.sepc||0) > 50) badges.push({icon:"🧠", label:"Smart"});
   if(p.membership?.type) badges.push({icon:"💎", label:"Member"});
   return badges;
 };
@@ -245,8 +246,8 @@ const skillElo = s => (SKILL_ELO[s]||1200)+rng(-50,50);
 const safe     = v => (v&&typeof v==="string") ? v : "";
 const genCode  = () => String(Math.floor(100000 + Math.random() * 900000));
 
-// ── KOOTORO
-function kootoro(player, history) {
+// ── SEPC
+function sepc(player, history) {
   if(!player||!history) return 0;
   let k=0;
   history.forEach(h=>{
@@ -325,11 +326,11 @@ function buildSeed(dbPlayers){
 const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:"PICKLE"});
 
 // ── DESIGN TOKENS
-const G={bg:"#0B0F14",panel:"rgba(17, 23, 32, 0.85)",card:"rgba(22, 29, 43, 0.9)",border:"rgba(30, 42, 58, 0.7)",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#A78BFA",pink:"#F472B6",text:"#E8EFF8",muted:"#64748B",dim:"#1A2332",win:"#22C55E",lose:"#EF4444"};
-const iS={background:G.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:12,padding:"12px 16px",color:G.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"};
-const bP={padding:"12px 24px",borderRadius:12,border:"none",background:`linear-gradient(135deg, ${G.accent}, #00cc8e)`,color:"#0B0F14",fontWeight:800,cursor:"pointer",fontSize:14,letterSpacing:0.5,boxShadow:"0 4px 12px rgba(0,255,178,0.2)"};
-const bS={padding:"11px 20px",borderRadius:12,border:`1px solid rgba(255,255,255,0.15)`,background:"rgba(255,255,255,0.03)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
-const bR={padding:"8px 14px",borderRadius:10,border:`1px solid ${G.red}66`,background:"rgba(239, 68, 68, 0.05)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:12};
+const G={bg:"#0B1320",panel:"#0E1624",card:"rgba(0, 0, 0, 0.2)",border:"#1E293B",accent:"#00FFB2",blue:"#3B82F6",gold:"#F59E0B",red:"#EF4444",purple:"#8B5CF6",pink:"#F472B6",text:"#FFFFFF",muted:"#64748B",dim:"#1E293B",win:"#00FFB2",lose:"#EF4444"};
+const iS={background:G.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 20px",color:G.text,fontSize:15,outline:"none",width:"100%",boxSizing:"border-box",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.2)"};
+const bP={padding:"14px 26px",borderRadius:12,border:"none",background:`linear-gradient(135deg, #00FFB2, #00E39B)`,color:"#030712",fontWeight:800,cursor:"pointer",fontSize:15,letterSpacing:0.5,boxShadow:"0 4px 14px rgba(0,255,178,0.25)"};
+const bS={padding:"12px 22px",borderRadius:12,border:`1px solid ${G.border}`,background:"rgba(255, 255, 255, 0.05)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+const bR={padding:"8px 16px",borderRadius:10,border:`1px solid rgba(239,68,68,0.3)`,background:"rgba(239, 68, 68, 0.05)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:13};
 
 // ── ATOMS
 const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
@@ -950,7 +951,7 @@ function EditPlayerModal({player,onSave,onClose,toast,history}) {
           <div style={{fontSize:10,color:G.muted,marginTop:1,display:"flex",gap:8,flexWrap:"wrap"}}>
             <span>ELO: <b style={{color:SKILL_COLOR[player.skill]}}>{player.elo||"?"}</b></span>
             <span>Trận: <b>{player.gamesPlayed||0}</b></span>
-            <span>Kootoro: <b style={{color:G.gold}}>{player.kootoro||0}</b></span>
+            <span>Sepc: <b style={{color:G.gold}}>{player.sepc||0}</b></span>
             <span>Events: <b>{f.eventCount||0}</b></span>
           </div>
         </div>
@@ -959,8 +960,8 @@ function EditPlayerModal({player,onSave,onClose,toast,history}) {
       {showReset&&<div style={{marginTop:10}}>
         <div style={{fontSize:10,color:G.red,marginBottom:8}}>⚠️ Không thể hoàn tác!</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),elo:SKILL_ELO[f.skill]||1200,baseElo:SKILL_ELO[f.skill]||1200,gamesPlayed:0,wins:0,kootoro:0,lastPartners:[],totalSpent:0,monthSpent:0,eventCount:0,paidAmount:0});toast(`Reset toàn bộ: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset tất cả</button>
-          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),kootoro:0});toast(`Reset Kootoro: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset Kootoro</button>
+          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),elo:SKILL_ELO[f.skill]||1200,baseElo:SKILL_ELO[f.skill]||1200,gamesPlayed:0,wins:0,sepc:0,lastPartners:[],totalSpent:0,monthSpent:0,eventCount:0,paidAmount:0});toast(`Reset toàn bộ: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset tất cả</button>
+          <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),sepc:0});toast(`Reset Sepc: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset Sepc</button>
           <button onClick={()=>{onSave({...player,...f,name:f.name.trim(),totalSpent:0,monthSpent:0,paidAmount:0});toast(`Reset chi phí: ${f.name}`,"warn");}} style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10}}>Reset chi phí</button>
         </div>
       </div>}
@@ -1022,7 +1023,7 @@ function QRModal({players,onRegister,onClose,onCheckInAll,activeEvent}){
   const submit=()=>{
     if(!safe(form.name).trim()){setErr("Nhập tên");return;}setErr("");
     const ex=players.find(p=>p&&safe(p.name).toLowerCase()===safe(form.name).toLowerCase().trim());
-    let vcode = ex?.viewerCode || Math.random().toString(36).slice(2,6).toUpperCase();
+    let vcode = ex?.viewerCode || genCode();
     if(ex){const cid=form.cwith?(ex.coupleId||`couple-${uid()}`):ex.coupleId;const reg={...ex,viewerCode:vcode,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true,paid:form.paid||ex.paid||false,coupleId:form.cwith?cid:ex.coupleId,coupleType:form.cwith?form.ctype:ex.coupleType,coupleWithId:form.cwith||null,isNew:false};onRegister(reg);setAdded(reg);}
     else{const np={id:uid(),viewerCode:vcode,name:form.name.trim(),gender:form.gender,skill:form.skill,elo:skillElo(form.skill),dtype:form.dtype,checkedIn:true,paid:form.paid||false,gamesPlayed:0,wins:0,lastPartners:[],coupleId:form.cwith?`couple-${uid()}`:null,coupleType:form.cwith?form.ctype:null,coupleWithId:form.cwith||null,createdAt:nowStr(),isNew:true};onRegister(np);setAdded(np);}
     setStep("success");
@@ -1413,7 +1414,7 @@ function Minigames() {
 // TV MODE
 // ══════════════════════════════════════
 function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
-  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
+  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
   const n = courts.length;
   const cols = n<=2?"repeat(2,1fr)":n===3?"repeat(3,1fr)":n===4?"repeat(2,1fr)":n<=6?"repeat(3,1fr)":"repeat(4,1fr)";
   const liveCount = courts.filter(c=>c.match).length;
@@ -1498,7 +1499,7 @@ function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
           </div>
         </div>
         <div style={{background:"#0D1117",borderRadius:14,padding:"10px 14px",border:"1px solid rgba(245,158,11,0.2)"}}>
-          <div style={{fontSize:10,letterSpacing:3,color:G.gold,marginBottom:6,fontWeight:800}}>🏆 TOP KOOTORO</div>
+          <div style={{fontSize:10,letterSpacing:3,color:G.gold,marginBottom:6,fontWeight:800}}>🏆 TOP SEPC</div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
             {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:4,alignItems:"center"}}>
               <span style={{fontSize:11,color:i===0?G.gold:G.muted,fontWeight:800}}>#{i+1}</span>
@@ -1569,7 +1570,7 @@ function ViewerChallengeModal({me,players,courts,onChallenge,onClose}){
 function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,elapsed,events,activeEventId,onLogout,me,onShowProfile,matchNotifs,onReadyChange}){
   const [vtab,setVtab]=useState("courts");
   const [showChal,setShowChal]=useState(false);
-  const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k);
+  const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k);
   const myPlayer = players.find(p=>p.id===me?.id)||me;
   const isGuest = myPlayer?.id?.startsWith("v_");
   const myRank = ranked.findIndex(p=>p.id===me?.id)+1||"?";
@@ -1760,7 +1761,7 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,onChallenge,
         {!isGuest&&<div style={{padding:"8px 12px",borderRadius:10,background:"rgba(0,255,178,0.06)",border:"1px solid rgba(0,255,178,0.15)",marginBottom:14,display:"flex",gap:12,flexWrap:"wrap"}}>
           <div style={{fontSize:11,color:G.accent,fontWeight:700}}>📈 Stats của: <strong>{safe(myPlayer?.name)}</strong></div>
           <div style={{fontSize:11,color:G.muted}}>{myPlayer?.wins||0}W / {myPlayer?.gamesPlayed||0}G · Win% {myPlayer?.gamesPlayed?Math.round((myPlayer.wins||0)/myPlayer.gamesPlayed*100):0}%</div>
-          <div style={{fontSize:11,color:G.gold,fontWeight:700}}>Kootoro: {kootoro(myPlayer,history)}</div>
+          <div style={{fontSize:11,color:G.gold,fontWeight:700}}>Sepc: {sepc(myPlayer,history)}</div>
         </div>}
         <AnalyticsView players={players} history={history} courts={courts} highlightId={me?.id}/>
       </div>}
@@ -2341,14 +2342,14 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
 
 function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onEdit,onResetAll}){
   const [search,setSearch]=useState(""),[fG,setFG]=useState("all"),[fS,setFS]=useState("all");
-  const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("kootoro");
+  const [fSt,setFSt]=useState("all"),[sort,setSort]=useState("sepc");
   let list=[...players].filter(p=>p?.name);
   const sq=safe(search).toLowerCase();
   if(sq)list=list.filter(p=>safe(p.name).toLowerCase().includes(sq)||safe(p.phone||"").includes(sq));
   if(fG!=="all")list=list.filter(p=>p.gender===fG);if(fS!=="all")list=list.filter(p=>p.skill===fS);
   if(fSt==="in")list=list.filter(p=>p.checkedIn);else if(fSt==="out")list=list.filter(p=>!p.checkedIn);
   else if(fSt==="playing")list=list.filter(p=>playIds.has(p.id));else if(fSt==="couple")list=list.filter(p=>p.coupleId);
-  list.sort((a,b)=>{if(sort==="kootoro")return (b.kootoro||0)-(a.kootoro||0);if(sort==="elo")return(b.elo||0)-(a.elo||0);if(sort==="name")return safe(a.name).localeCompare(safe(b.name));return(b.gamesPlayed||0)-(a.gamesPlayed||0);});
+  list.sort((a,b)=>{if(sort==="sepc")return (b.sepc||0)-(a.sepc||0);if(sort==="elo")return(b.elo||0)-(a.elo||0);if(sort==="name")return safe(a.name).localeCompare(safe(b.name));return(b.gamesPlayed||0)-(a.gamesPlayed||0);});
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
       <div style={{fontSize:14,fontWeight:800,color:G.text}}>👥 Người chơi ({players.length})</div>
@@ -2364,14 +2365,14 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onEdit
       <select value={fG} onChange={e=>setFG(e.target.value)} style={{...iS,maxWidth:80}}><option value="all">Tất cả</option><option value="M">♂ Nam</option><option value="F">♀ Nữ</option></select>
       <select value={fS} onChange={e=>setFS(e.target.value)} style={{...iS,maxWidth:100}}><option value="all">Mọi trình</option>{SKILL_LEVELS.map(s=><option key={s} value={s}>{s}</option>)}</select>
       <select value={fSt} onChange={e=>setFSt(e.target.value)} style={{...iS,maxWidth:115}}><option value="all">Tất cả</option><option value="in">✅ Check-in</option><option value="out">❌ Chưa vào</option><option value="playing">🔴 Đang đấu</option><option value="couple">💑 Couple</option></select>
-      <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="kootoro">↓ Kootoro</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
+      <select value={sort} onChange={e=>setSort(e.target.value)} style={{...iS,maxWidth:110}}><option value="sepc">↓ Sepc</option><option value="elo">↓ ELO</option><option value="name">↓ Tên</option><option value="games">↓ Trận</option></select>
     </div>
     <div style={{background:G.panel,borderRadius:16,border:`1px solid ${G.border}`,overflow:"hidden"}}>
       <div style={{display:"grid",gridTemplateColumns:"165px 45px 58px 88px 55px 44px 46px 68px 52px 90px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>NGƯỜI CHƠI</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div><div style={{color:"#00FFB2"}}>MÃ</div><div>ACTION</div>
+        <div>NGƯỜI CHƠI</div><div>G</div><div>TRÌNH</div><div>TRẠNG THÁI</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>SEPC</div><div style={{color:"#00FFB2"}}>MÃ</div><div>ACTION</div>
       </div>
       {list.map((p,i)=>{
-        const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=p.kootoro||0;
+        const playing=playIds.has(p.id),wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0,k=p.sepc||0;
         const badges = playerBadges(p, history);
         return <div key={p.id} style={{display:"grid",gridTemplateColumns:"165px 45px 58px 88px 55px 44px 46px 68px 52px 90px",padding:"7px 12px",borderBottom:i<list.length-1?`1px solid ${G.border}22`:undefined,background:i%2?"transparent":G.card+"44",alignItems:"center"}}>
           <div style={{fontSize:11,fontWeight:700,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
@@ -2447,7 +2448,7 @@ function QueueTab({queue,setQueue,courts,available,history,elapsed,onScore,onAss
 
 function LeaderView({ranked, onShowProfile}){
   return <div>
-    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Kootoro</div>
+    <div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:14}}>🏆 Bảng xếp hạng Sepc</div>
     {ranked.slice(0,3).length>0&&<div style={{display:"flex",gap:10,marginBottom:16,justifyContent:"center",alignItems:"flex-end"}}>
       {[ranked[1],ranked[0],ranked[2]].filter(Boolean).map((p,pi)=>{
         const rank=pi===0?2:pi===1?1:3;const h=rank===1?120:rank===2?90:75;const c=rank===1?G.gold:rank===2?"#9ca3af":"#b87333";
@@ -2463,7 +2464,7 @@ function LeaderView({ranked, onShowProfile}){
     </div>}
     <div style={{background:G.panel,borderRadius:11,border:`1px solid ${G.border}`,overflow:"hidden"}}>
       <div style={{display:"grid",gridTemplateColumns:"38px 1fr 48px 55px 60px 48px 46px 76px",padding:"7px 12px",borderBottom:`1px solid ${G.border}`,fontSize:9,color:G.muted,fontWeight:700}}>
-        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>KOOTORO</div>
+        <div>#</div><div>TÊN</div><div>G</div><div>TRÌNH</div><div>ELO</div><div>TRẬN</div><div>WIN%</div><div>SEPC</div>
       </div>
       {ranked.map((p,i)=>{
         const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):0;
@@ -2750,8 +2751,8 @@ function KioskTab({players, onRegister, queue, courts, history}){
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><div style={{flex:1,height:1,background:G.border}}/><span style={{fontSize:12,color:G.dim}}>hoặc</span><div style={{flex:1,height:1,background:G.border}}/></div>
       <button onClick={()=>{setNameSearch("");setStep("form");}} style={{...bP,width:"100%",padding:"18px",fontSize:16,borderRadius:14}}>✏️ Đăng ký mới</button>
       {history.length>0&&<div style={{marginTop:28,padding:"14px 16px",borderRadius:12,background:G.panel,border:`1px solid ${G.border}`}}>
-        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:10}}>🏆 TOP KOOTORO</div>
-        {[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k).slice(0,3).map((p,i)=>(
+        <div style={{fontSize:11,color:G.gold,fontWeight:700,marginBottom:10}}>🏆 TOP SEPC</div>
+        {[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,3).map((p,i)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:i<2?6:0}}>
             <span style={{fontSize:14}}>{["🥇","🥈","🥉"][i]}</span>
             <span style={{fontSize:13,fontWeight:700,color:G.text,flex:1}}>{safe(p.name)}</span>
@@ -2916,7 +2917,7 @@ function App(){
         id:p.id, name:p.name, gender:p.gender, skill:p.skill, elo:p.elo, baseElo:p.baseElo||p.elo,
         dtype:p.dtype, coupleId:p.coupleId||null, coupleType:p.coupleType||null,
         gamesPlayed:p.gamesPlayed||0, wins:p.wins||0, lastPartners:p.lastPartners||[],
-        createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", kootoro:p.kootoro||0,
+        createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", sepc:p.sepc||0,
         checkedIn: p.checkedIn === true, // ← lưu đúng boolean
         paid:p.paid||false, paidAmount:p.paidAmount||0, payMethod:p.payMethod||"transfer",
         totalSpent:p.totalSpent||0, monthSpent:p.monthSpent||0, eventCount:p.eventCount||0
@@ -3093,7 +3094,7 @@ function App(){
     viewerCode:p.viewerCode||null,
     dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
     gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
-    createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",kootoro:p.kootoro||0,
+    createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",sepc:p.sepc||0,
     checkedIn:p.checkedIn||false,paid:p.paid||false,
     paidAmount:p.paidAmount||0,payMethod:p.payMethod||"transfer",
     totalSpent:p.totalSpent||0,monthSpent:p.monthSpent||0,eventCount:p.eventCount||0,
@@ -3104,7 +3105,7 @@ function App(){
     let codeStr = "";
     setPlayers(prev=>{
       const ex=prev.find(p=>p.id===data.id);
-      const newVCode = ex?.viewerCode || data.viewerCode || Math.random().toString(36).slice(2,6).toUpperCase();
+      const newVCode = ex?.viewerCode || data.viewerCode || genCode();
       codeStr = newVCode;
       const newData = {...data, viewerCode: newVCode, checkedIn: true};
       let upd=ex
@@ -3312,7 +3313,7 @@ function App(){
       if(!isW&&!isL)return x;
       const lp=np[x.id]?[np[x.id],...(x.lastPartners||[])].slice(0,4):x.lastPartners||[];
       const updP={...x,elo:x.elo+(isW?delta:-delta),gamesPlayed:(x.gamesPlayed||0)+1,wins:(x.wins||0)+(isW?1:0),lastPartners:lp};
-      updP.kootoro=Math.round(kootoro(updP,newHistory)*10)/10;
+      updP.sepc=Math.round(sepc(updP,newHistory)*10)/10;
       return updP;
     });
     setPlayers(newPlayers);
@@ -3336,7 +3337,7 @@ function App(){
       if(!p) return prev;
       const newCI = p.checkedIn !== true;
       // Auto-generate viewerCode when checking in if not already set
-      const vcode = p.viewerCode || (newCI ? Math.random().toString(36).slice(2,6).toUpperCase() : null);
+      const vcode = p.viewerCode || (newCI ? genCode() : null);
       const upd=prev.map(x=>x.id===id?{...x,checkedIn:newCI,viewerCode:vcode}:x);
       showT(`${safe(p.name)} ${newCI?"check in ✅ · Mã: "+vcode:"rời session"}`);
       window._lastSavedAt = Date.now();
@@ -3514,9 +3515,9 @@ function App(){
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:14}}>{courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} onSub={setSubCourt} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}</div>
         {queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>⚔️ HÀNG CHỜ ({queue.length})</div><div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={assign}/>)}</div></>}
       </div>}
-      {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onEdit={setEditingPlayer} onResetAll={()=>{if(!confirm("Reset ELO + Kootoro TẤT CẢ về mùa mới?"))return;setPlayers(p=>p.map(x=>({...x,elo:SKILL_ELO[x.skill]||1200,baseElo:SKILL_ELO[x.skill]||1200,kootoro:0,gamesPlayed:0,wins:0,lastPartners:[]})));showT("🔄 Reset tất cả xong!","warn");}}/>}
+      {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onEdit={setEditingPlayer} onResetAll={()=>{if(!confirm("Reset ELO + Sepc TẤT CẢ về mùa mới?"))return;setPlayers(p=>p.map(x=>({...x,elo:SKILL_ELO[x.skill]||1200,baseElo:SKILL_ELO[x.skill]||1200,sepc:0,gamesPlayed:0,wins:0,lastPartners:[]})));showT("🔄 Reset tất cả xong!","warn");}}/>}
       {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
-      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:kootoro(p,history)})).sort((a,b)=>b.k-a.k)} history={history} />}
+      {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k)} history={history} />}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}
       {tab==="kiosk"      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history} activeEvent={activeEvent} accounts={accounts} onSaveAccounts={newAcc=>{setAccounts(newAcc);window._lastSavedAt=Date.now();STORE.save({...stateRef.current,accounts:newAcc});}}/>}
