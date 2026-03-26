@@ -45,6 +45,15 @@ button:disabled{opacity:0.5;cursor:not-allowed;filter:saturate(0.5);}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px);filter:blur(2px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
 .card-float{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.06);}
 .glass-inner{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.02);}
+.dash-grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.court-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 900px) { 
+  .dash-grid { grid-template-columns: 350px 1fr; } 
+  .stats-grid { grid-template-columns: repeat(6, 1fr); }
+  .court-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 899px) { .hide-mobile { display: none !important; } }
 </style>
   <!-- React 18 -->
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -2534,7 +2543,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     </div>}
 
     {/* Stats grid — Pickleball Hub Style */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:14}}>
+    <div className="stats-grid">
       {stats.map(s=>(
         <div key={s.l} style={{background:G.card,borderRadius:14,padding:"12px 8px",border:`1px solid ${s.c}44`,textAlign:"center",boxShadow:`0 4px 20px ${s.c}18`}}>
           <div style={{fontSize:20,marginBottom:2}}>{s.i}</div>
@@ -2564,7 +2573,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     </div>}
 
     {/* 2-COLUMN: Left=Queue+Actions, Right=Courts */}
-    <div style={{display:"grid",gridTemplateColumns:"350px 1fr",gap:12,alignItems:"start"}}>
+    <div className="dash-grid">
       {/* LEFT */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:14}}>
@@ -2587,7 +2596,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
       </div>
       {/* RIGHT */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
+        <div className="court-grid">
           {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"} queue={queue}/>)}
         </div>
         {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>

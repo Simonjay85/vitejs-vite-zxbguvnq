@@ -1,4 +1,4 @@
-const CACHE = 'pickleball-v37';
+const CACHE = 'pickleball-v38';
 
 // Install: skip waiting immediately so new SW activates right away
 self.addEventListener('install', e => {
