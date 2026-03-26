@@ -1320,74 +1320,87 @@ function TBlock({team,label,color}){
     <div style={{fontSize:9,color,fontWeight:700,borderTop:`1px solid ${color}20`,paddingTop:3,marginTop:3}}>⌀ {teamElo(team)}</div>
   </div>;
 }
-function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,gameMode}){
+function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,gameMode,queue}){
   const m=court.match;
   const mm=String(Math.floor((elapsed||0)/60)).padStart(2,"0"),ss=String((elapsed||0)%60).padStart(2,"0");
   const diff=m?Math.abs(teamElo(m.team1)-teamElo(m.team2)):0;
   const isKing=gameMode==="king"&&courtIdx===0;
-  const courtLabel=isKing?"👑 Vua":gameMode==="ladder"?`#${(courtIdx||0)+1}`:court.name;
-  
-  return <div style={{background:"rgba(17,24,39,0.5)",backdropFilter:"blur(16px)",border:m?`1px solid rgba(0,224,255,0.4)`:`1px solid ${G.border}`,borderRadius:24,overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:m?"0 8px 32px rgba(0,255,163,0.15)":"0 4px 16px rgba(0,0,0,0.2)"}}>
-    <div style={{padding:"14px 16px",background:m?"rgba(0,255,163,0.05)":"rgba(255,255,255,0.02)",display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:`1px solid ${G.border}`}}>
-      <div>
-        <div style={{fontWeight:900,fontSize:15,color:isKing?G.gold:G.text}}>{courtLabel}</div>
-        <div style={{fontSize:10,color:G.muted,marginTop:2,letterSpacing:1}}>{m?"IN PLAY":"AVAILABLE"}</div>
-      </div>
+  const courtNum=(courtIdx||0)+1;
+  const [showQPick,setShowQPick]=React.useState(false);
+
+  return <div style={{background:"rgba(17,24,39,0.5)",backdropFilter:"blur(16px)",border:m?`2px solid rgba(0,224,255,0.45)`:`1px solid ${G.border}`,borderRadius:20,overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:m?"0 8px 32px rgba(0,255,163,0.15)":"0 4px 16px rgba(0,0,0,0.2)",minHeight:175}}>
+
+    {/* HEADER */}
+    <div style={{padding:"8px 12px",background:m?"rgba(0,255,163,0.06)":"rgba(255,255,255,0.02)",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        {m&&<div style={{fontSize:13,fontFamily:"monospace",fontWeight:900,color:"transparent",backgroundImage:G.grad,WebkitBackgroundClip:"text"}}>{mm}:{ss}</div>}
-        <div style={{padding:"4px 10px",borderRadius:12,fontSize:9,fontWeight:800,letterSpacing:.5,
-          background:m?"rgba(0,255,163,0.1)":"rgba(255,255,255,0.05)",
-          color:m?"#00FFA3":G.muted,
-          border:m?"1px solid rgba(0,255,163,0.3)":`1px solid ${G.border}`}}>
-          {m?"● LIVE":"TRỐNG"}
+        <div style={{width:28,height:28,borderRadius:8,background:m?`linear-gradient(135deg,${G.accent},${G.blue})`:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:m?`0 4px 14px ${G.accent}55`:"none",flexShrink:0}}>
+          <span style={{fontSize:14,fontWeight:900,color:m?"#0B1220":"#fff"}}>{isKing?"👑":courtNum}</span>
+        </div>
+        <div>
+          <div style={{fontWeight:900,fontSize:13,color:isKing?G.gold:G.text}}>{isKing?"Vua":court.name}</div>
+          <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{m?"IN PLAY":"AVAILABLE"}</div>
         </div>
       </div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        {m&&<div style={{fontSize:12,fontFamily:"monospace",fontWeight:900,color:"transparent",backgroundImage:G.grad,WebkitBackgroundClip:"text"}}>{mm}:{ss}</div>}
+        <div style={{padding:"2px 8px",borderRadius:8,fontSize:8,fontWeight:800,background:m?"rgba(0,255,163,0.12)":"rgba(255,255,255,0.05)",color:m?"#00FFA3":G.muted,border:m?"1px solid rgba(0,255,163,0.35)":`1px solid ${G.border}`}}>{m?"● LIVE":"TRỐNG"}</div>
+      </div>
     </div>
-    <div style={{padding:"16px",flex:1}}>
+
+    {/* BODY */}
+    <div style={{padding:"10px 12px",flex:1,display:"flex",flexDirection:"column"}}>
       {m?(
-        <div style={{marginBottom:16}}>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(0,224,255,0.05)",borderRadius:12,border:`1px solid rgba(0,224,255,0.2)`}}>
-              <div style={{display:"flex",flexDirection:"column"}}>
-                <div style={{fontSize:9,color:"#00E0FF",fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAM A</div>
-                {(m.team1||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:14,fontWeight:900,color:G.text}}>{safe(p.name)}</span>)}
-              </div>
-              <span style={{fontSize:11,fontWeight:900,color:"#00E0FF"}}>{Math.round(teamElo(m.team1))}</span>
+        <div style={{display:"flex",flexDirection:"column",gap:4,flex:1}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"rgba(0,224,255,0.05)",borderRadius:8,border:`1px solid rgba(0,224,255,0.2)`}}>
+            <div>
+              <div style={{fontSize:7,color:"#00E0FF",fontWeight:800,letterSpacing:1,marginBottom:2}}>TEAM A</div>
+              {(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:12,fontWeight:900,color:G.text}}>{safe(p.name)}</div>)}
             </div>
-            
-            <div style={{textAlign:"center",padding:"4px 0"}}>
-              <span style={{fontSize:11,fontWeight:900,color:G.dim,background:"rgba(17,24,39,0.8)",padding:"4px 12px",borderRadius:20,border:`1px solid ${G.border}`}}>
-                VS <span style={{color:"#00FFA3"}}>Δ{diff}</span>
-              </span>
+            <span style={{fontSize:10,fontWeight:900,color:"#00E0FF"}}>{Math.round(teamElo(m.team1))}</span>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <span style={{fontSize:9,fontWeight:900,color:G.dim,background:"rgba(17,24,39,0.8)",padding:"2px 8px",borderRadius:20,border:`1px solid ${G.border}`}}>VS <span style={{color:"#00FFA3"}}>Δ{diff}</span></span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"rgba(245,158,11,0.05)",borderRadius:8,border:`1px solid rgba(245,158,11,0.2)`}}>
+            <div>
+              <div style={{fontSize:7,color:"#F59E0B",fontWeight:800,letterSpacing:1,marginBottom:2}}>TEAM B</div>
+              {(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:12,fontWeight:900,color:G.text}}>{safe(p.name)}</div>)}
             </div>
-            
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(245,158,11,0.05)",borderRadius:12,border:`1px solid rgba(245,158,11,0.2)`}}>
-              <div style={{display:"flex",flexDirection:"column"}}>
-                <div style={{fontSize:9,color:"#F59E0B",fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAM B</div>
-                {(m.team2||[]).filter(Boolean).map(p=><span key={p.id} style={{fontSize:14,fontWeight:900,color:G.text}}>{safe(p.name)}</span>)}
-              </div>
-              <span style={{fontSize:11,fontWeight:900,color:"#F59E0B"}}>{Math.round(teamElo(m.team2))}</span>
-             </div>
+            <span style={{fontSize:10,fontWeight:900,color:"#F59E0B"}}>{Math.round(teamElo(m.team2))}</span>
           </div>
         </div>
       ):(
-        <div style={{textAlign:"center",padding:"24px 0 32px"}}>
-          <div style={{width:64,height:64,borderRadius:20,background:"rgba(255,255,255,0.02)",border:`1px solid rgba(255,255,255,0.05)`,boxShadow:"inset 0 2px 10px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>{isKing?"👑":"🏓"}</div>
-          <div style={{fontSize:12,fontWeight:700,color:G.muted}}>{isKing?"Waiting for King...":"Court Available"}</div>
+        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"4px 0"}}>
+          <div style={{fontSize:24,marginBottom:6}}>{isKing?"👑":"🏓"}</div>
+          <div style={{fontSize:10,fontWeight:600,color:G.muted}}>{isKing?"Waiting for King...":"Court Available"}</div>
         </div>
       )}
 
-      {/* FOOTER ACTIONS */}
-      {!readOnly&&<div style={{display:"flex",gap:8,alignItems:"center",marginTop:m?0:10}}>
-        {m ? (
+      {/* Queue picker */}
+      {showQPick&&!m&&queue&&queue.length>0&&<div style={{marginTop:6,background:G.panel,borderRadius:8,border:`1px solid ${G.accent}44`,overflow:"hidden"}}>
+        <div style={{fontSize:8,color:G.accent,fontWeight:800,padding:"4px 8px",borderBottom:`1px solid ${G.border}`,letterSpacing:1}}>CHỌN TRẬN TỪ HÀNG CHỜ</div>
+        {queue.map((q,i)=>{
+          const names=[...(q.team1||[]),...(q.team2||[])].filter(Boolean).map(p=>safe(p.name).split(" ").pop());
+          const t1=names.slice(0,2).join("+"),t2=names.slice(2,4).join("+");
+          return <div key={i} onClick={()=>{onAssign(court.id,q);setShowQPick(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",cursor:"pointer",borderBottom:i<queue.length-1?`1px solid ${G.border}22`:undefined}} onMouseEnter={e=>e.currentTarget.style.background="rgba(0,255,178,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span style={{fontSize:8,color:G.muted,minWidth:12}}>#{i+1}</span>
+            <span style={{fontSize:10,fontWeight:700,color:G.text,flex:1}}>{t1} <span style={{color:G.muted}}>vs</span> {t2}</span>
+          </div>;
+        })}
+        {!queue.length&&<div style={{fontSize:9,color:G.dim,padding:"6px 8px"}}>Hàng chờ trống</div>}
+      </div>}
+
+      {/* Footer actions */}
+      {!readOnly&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:m?8:6}}>
+        {m?(
           <>
-            <button onClick={()=>onScore(court.id)} style={{flex:1,padding:"12px",borderRadius:12,border:"none",background:G.grad,color:"#0B1220",fontWeight:900,cursor:"pointer",fontSize:12,boxShadow:"0 4px 16px rgba(0,255,163,0.3)"}}>Nhập kết quả</button>
-            {onSub&&<button onClick={()=>onSub(court)} style={{padding:"12px 16px",borderRadius:12,border:`1px solid rgba(255,255,255,0.1)`,background:"rgba(255,255,255,0.05)",color:G.text,cursor:"pointer",fontSize:13,fontWeight:700}}>🔄</button>}
+            <button onClick={()=>onScore(court.id)} style={{flex:1,padding:"8px",borderRadius:9,border:"none",background:G.grad,color:"#0B1220",fontWeight:900,cursor:"pointer",fontSize:11,boxShadow:"0 4px 14px rgba(0,255,163,0.3)"}}>Nhập kết quả</button>
+            {onSub&&<button onClick={()=>onSub(court)} style={{padding:"8px 11px",borderRadius:9,border:`1px solid rgba(255,255,255,0.1)`,background:"rgba(255,255,255,0.05)",color:G.text,cursor:"pointer",fontSize:11,fontWeight:700}}>🔄</button>}
           </>
-        ) : (
+        ):(
           <>
-            <button onClick={()=>{if(next?.length) onAssign(court.id,next[0]);}} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:"rgba(0,255,163,0.1)",color:"#00FFA3",fontWeight:800,cursor:"pointer",fontSize:12,border:"1px solid rgba(0,255,163,0.3)"}}>▶ Auto Gán</button>
-            <button onClick={()=>{}} style={{flex:1,padding:"11px",borderRadius:12,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontWeight:700,cursor:"pointer",fontSize:12}}>Custom</button>
+            <button onClick={()=>{if(next?.length) onAssign(court.id,next[0]);}} style={{flex:1,padding:"8px",borderRadius:9,border:"none",background:"rgba(0,255,163,0.1)",color:"#00FFA3",fontWeight:800,cursor:"pointer",fontSize:10,border:"1px solid rgba(0,255,163,0.3)"}}>▶ Auto Gán</button>
+            <button onClick={()=>setShowQPick(v=>!v)} style={{flex:1,padding:"8px",borderRadius:9,border:`1px solid ${showQPick?G.accent+"66":G.border}`,background:showQPick?G.accent+"12":"transparent",color:showQPick?G.accent:G.muted,fontWeight:700,cursor:"pointer",fontSize:10}}>📋 Chọn trận</button>
           </>
         )}
       </div>}
@@ -1404,17 +1417,17 @@ function QRow({q,idx,courts,onAssign,onRemove,readOnly}){
   const PlayerRow=({p,align="left"})=>{
     const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):null;
     const sc=SKILL_COLOR[p.skill]||G.muted;
-    return <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:align==="right"?"flex-end":"flex-start"}}>
+    return <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:align==="right"?"flex-end":"flex-start"}}>
       {align==="right"&&<>
         {wr!==null&&<span style={{fontSize:9,fontWeight:700,color:wr>=50?G.accent:G.red}}>{wr}%</span>}
-        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 5px",borderRadius:4}}>{p.skill||"?"}</span>
-        <span style={{fontSize:12,fontWeight:700,color:G.text,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
-        <PlayerAvatar name={p.name} size={20} color={p.avatarColor} avatarImg={p.avatarImg}/>
+        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 4px",borderRadius:4}}>{p.skill||"?"}</span>
+        <span style={{fontSize:11,fontWeight:700,color:G.text,maxWidth:85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
+        <PlayerAvatar name={p.name} size={18} color={p.avatarColor} avatarImg={p.avatarImg}/>
       </>}
       {align==="left"&&<>
-        <PlayerAvatar name={p.name} size={20} color={p.avatarColor} avatarImg={p.avatarImg}/>
-        <span style={{fontSize:12,fontWeight:700,color:G.text,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
-        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 5px",borderRadius:4}}>{p.skill||"?"}</span>
+        <PlayerAvatar name={p.name} size={18} color={p.avatarColor} avatarImg={p.avatarImg}/>
+        <span style={{fontSize:11,fontWeight:700,color:G.text,maxWidth:85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
+        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 4px",borderRadius:4}}>{p.skill||"?"}</span>
         {wr!==null&&<span style={{fontSize:9,fontWeight:700,color:wr>=50?G.accent:G.red}}>{wr}%</span>}
       </>}
     </div>;
@@ -2510,7 +2523,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     {i:"📋",l:"Hàng chờ",   v:queue.length,                                             c:"#f59e0b"},
     {i:"🏆",l:"Trận xong",v:history.filter(h=>h.eventId===activeEvent?.id).length,  c:"#22C55E"},
   ];
-  return <div>
+  return <div style={{width:"100%",maxWidth:1200,margin:"0 auto"}}>
     {/* Event banner */}
     {activeEvent&&<div style={{padding:"8px 12px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <div style={{width:8,height:8,borderRadius:"50%",background:G.red,boxShadow:`0 0 8px ${G.red}`,flexShrink:0}}/>
@@ -2551,7 +2564,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     </div>}
 
     {/* 2-COLUMN: Left=Queue+Actions, Right=Courts */}
-    <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:12,alignItems:"start"}}>
+    <div style={{display:"grid",gridTemplateColumns:"350px 1fr",gap:12,alignItems:"start"}}>
       {/* LEFT */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:14}}>
@@ -2575,7 +2588,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
       {/* RIGHT */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
-          {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}
+          {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"} queue={queue}/>)}
         </div>
         {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>
           <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginTop:2}}>📋 KẾT QUẢ GẦN ĐÂY</div>
