@@ -64,6 +64,7 @@ export default function AdminDashboard() {
   const [courts,setCourts]=useState<any[]>(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
   const [queue,setQueue]=useState<any[]>([]);
   const [pendingChallenges,setPendingChallenges]=useState<any[]>([]);
+  const [paymentAlerts,setPaymentAlerts]=useState<any[]>([]);
   const [events,setEvents]=useState<any[]>([]);
   const [activeEventId,setActiveEventId]=useState<string|null>(null);
   const [tab,setTab]=useState('dashboard');
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
   useEffect(()=>{
     try{
       const saved=localStorage.getItem('pb_os_state');
-      if(saved){const s=JSON.parse(saved);if(s.players?.length)setPlayers(buildSeed(s.players));if(s.history)setHistory(s.history);if(s.accounts)setAccounts(s.accounts);if(s.events)setEvents(s.events);if(s.activeEventId)setActiveEventId(s.activeEventId);if(s.queue)setQueue(s.queue);if(s.announcement!==undefined)setAnnouncement(s.announcement);}
+      if(saved){const s=JSON.parse(saved);if(s.players?.length)setPlayers(buildSeed(s.players));if(s.history)setHistory(s.history);if(s.accounts)setAccounts(s.accounts);if(s.events)setEvents(s.events);if(s.activeEventId)setActiveEventId(s.activeEventId);if(s.queue)setQueue(s.queue);if(s.announcement!==undefined)setAnnouncement(s.announcement);if(s.paymentAlerts)setPaymentAlerts(s.paymentAlerts);}
     }catch{}
     setLoading(false);
   },[]);
@@ -92,11 +93,11 @@ export default function AdminDashboard() {
   const saveState=useCallback(()=>{
     if(!me||me.role===ROLES.VIEWER)return;
     setSaving(true);
-    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p})),history,accounts,events,activeEventId,queue,announcement}));}catch{}
+    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p})),history,accounts,events,activeEventId,queue,announcement,paymentAlerts}));}catch{}
     setTimeout(()=>setSaving(false),400);
-  },[me,players,history,accounts,events,activeEventId,queue,announcement]);
+  },[me,players,history,accounts,events,activeEventId,queue,announcement,paymentAlerts]);
 
-  useEffect(()=>{const t=setTimeout(saveState,800);return()=>clearTimeout(t);},[players,history,accounts,events,activeEventId,queue,pendingChallenges]);
+  useEffect(()=>{const t=setTimeout(saveState,800);return()=>clearTimeout(t);},[players,history,accounts,events,activeEventId,queue,pendingChallenges,paymentAlerts]);
 
   // ─ Court timers
   useEffect(()=>{
@@ -193,7 +194,17 @@ export default function AdminDashboard() {
 
   const handleChallenge=(cData:any)=>{setPendingChallenges(prev=>[...prev,{id:uid(),...cData,requestedAt:Date.now()}]);showT('Đã gửi thách đấu đến Host! ⏳');};
   const handleApproveChallenge=(id:string)=>{const c=pendingChallenges.find(x=>x.id===id);if(!c)return;setQueue(prev=>[...prev,{team1:[c.challenger,c.partner],team2:[c.opp1,c.opp2],dtype:'any',custom:true,challengeMatch:true}]);setPendingChallenges(prev=>prev.filter(x=>x.id!==id));showT('Đã duyệt thách đấu! ⚔️');};
-  const handleRejectChallenge=(id:string)=>{setPendingChallenges(prev=>prev.filter(x=>x.id!==id));showT('Đã từ chối thách đấu.');};
+  const handleRejectChallenge=(id:string)=>{setPendingChallenges(prev=>prev.filter(x=>x.id!==id));showT('Đã huỷ thách đấu');};
+
+  const handleApprovePayment = (id:string, pid:string) => {
+    setPlayers(prev=>prev.map((p:any)=>p.id===pid?{...p, paid:true}:p));
+    setPaymentAlerts(prev=>prev.filter(x=>x.id!==id));
+    showT('Đã xác nhận thanh toán ✅');
+  };
+  const handleRejectPayment = (id:string) => {
+    setPaymentAlerts(prev=>prev.filter(x=>x.id!==id));
+    showT('Đã xoá yêu cầu thanh toán');
+  };
 
   const handleScore=(w:number,sw:number,sl:number)=>{
     if(!activeEvent){showT('Tạo Event trước khi nhập điểm!','warn');return;}
@@ -311,7 +322,7 @@ export default function AdminDashboard() {
           <span className="chip chip-cyan">✅ {players.filter((p:any)=>p?.checkedIn).length} check-in</span>
           <span className="chip chip-live">🔴 {courts.filter((c:any)=>c.match).length} live</span>
           <RBadge role={me.role}/>
-          <span onClick={()=>setModal('admin')} style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'rgba(255,193,7,0.12)',color:G.gold,border:'1px solid rgba(255,193,7,0.25)',fontWeight:700,cursor:'pointer',letterSpacing:1}}>
+          <span onClick={()=>setModal('admin')} style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'rgba(255,193,7,0.12)',color:G.gold,border:'1px solid rgba(255,193,7,0.25)',fontWeight:700,letterSpacing:1}}>
             👁 {accounts?.viewerCode||'???'}
           </span>
           {activeEvent
@@ -389,6 +400,35 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
-    </div>
+
+      {/* Payment Alerts Banner */}
+      {paymentAlerts.length > 0 && isSA && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 p-3">
+          <div className="text-xs font-bold text-amber-500 mb-2 flex items-center gap-2">
+            <span>💰 CÓ {paymentAlerts.length} YÊU CẦU XÁC NHẬN THANH TOÁN</span>
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+          </div>
+          <div className="flex flex-col gap-2">
+            {paymentAlerts.map(pa => (
+              <div key={pa.id} className="bg-slate-800/80 rounded-xl border border-slate-700 p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="text-xl">{pa.method==="cash"?"💵":pa.method==="qr_auto"?"📱":"🧾"}</div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-100">{pa.playerName}</div>
+                    <div className="text-xs text-slate-400 mt-1">{pa.method==="cash"?"Nộp tiền mặt":pa.method==="qr_auto"?"Quét QR Momo":"Upload biên lai"}</div>
+                  </div>
+                </div>
+                <div className="flex gap-2 items-center">
+                  {pa.billBase64 && <button onClick={()=>{const w=window.open("","_blank");w?.document.write(`<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;"><img src="${pa.billBase64}" style="max-width:100%;max-height:100vh;object-fit:contain;"/></div>`);}} className="bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/20">Xem Bill 🖼️</button>}
+                  <button onClick={()=>handleApprovePayment(pa.id, pa.playerId)} className="bg-emerald-500 text-black px-3 py-1.5 rounded-lg text-xs font-bold">Đã nhận tiền ✅</button>
+                  <button onClick={()=>handleRejectPayment(pa.id)} className="border border-red-500/30 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold">Xoá ✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Main Container */}</div>
   );
 }

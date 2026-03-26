@@ -204,7 +204,7 @@ function App(){
           </div>
           <div style={{fontSize:11,color:G.muted,fontWeight:600}}>
             {activeEvent.gameMode==="king"?"👑 King of the Court":activeEvent.gameMode==="ladder"?"📈 Ladder (Lên/Xuống hạng)":"⚔️ Chia Đội Đấu Chéo"} · 
-            Phí: {activeEvent.feePerPerson?activeEvent.feePerPerson.toLocaleString("vi-VN")+"đ":"Miễn phí"}
+            Phí: {activeEvent.feePerPerson?activeEvent.feePerPerson.toLocaleString("vi-VN")+"đ":(activeEvent.courtFee>0?"Chia đều cuối giờ":"Miễn phí")}
           </div>
          </div>
         :<div style={{fontSize:12,color:G.muted,marginTop:8}}>Chưa có event nào đang chạy</div>}
