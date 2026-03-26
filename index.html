@@ -1246,7 +1246,7 @@ function QRModal({players,onRegister,onClose,onCheckInAll,activeEvent}){
             </div>
           </div>
           {/* QR thanh toán nếu chưa TT */}
-          {!added.paid&&<PayQRBox qrUrl={activeEvent?.qrUrl} courtFee={activeEvent?.courtFee} extraFee={activeEvent?.extraFee} players={players}/>}
+          {!added.paid&&<PayQRBox qrUrl={activeEvent?.qrUrl} courtFee={activeEvent?.courtFee} extraFee={activeEvent?.extraFee} feePerPerson={activeEvent?.feePerPerson} players={players}/>}
           {/* Mark paid button */}
           {!added.paid&&<button onClick={()=>{setAdded(a=>({...a,paid:true}));onRegister({...added,paid:true});}} style={{...bP,width:"100%",marginBottom:8,background:`linear-gradient(135deg,${G.accent},${G.blue})`}}>✅ Đánh dấu đã thanh toán</button>}
           <div style={{display:"flex",gap:8}}>
@@ -2137,10 +2137,10 @@ function EventsViewer({events, activeEventId, players, me}){
 
 
 
-function PayQRBox({qrUrl,courtFee,extraFee,players}){
+function PayQRBox({qrUrl,courtFee,extraFee,feePerPerson,players}){
   const total=(Number(courtFee)||0)+(Number(extraFee)||0);
   const ciCount=players.filter(p=>p?.checkedIn).length||1;
-  const perPerson=total>0?Math.ceil(total/ciCount):0;
+  const perPerson=feePerPerson>0?feePerPerson:(total>0?Math.ceil(total/ciCount):0);
   if(!total&&!qrUrl) return null;
   return <div style={{background:G.card,border:`1px solid ${G.gold}44`,borderRadius:12,padding:14,marginBottom:12,textAlign:"center"}}>
     <div style={{fontSize:11,fontWeight:700,color:G.gold,marginBottom:8}}>💰 CHI PHÍ BUỔI CHƠI</div>
@@ -2169,7 +2169,7 @@ function CostTab({events,players,activeEventId,onUpdatePlayer,onUpdateEvent}){
   const paidPlayers=evPlayers.filter(p=>p?.paid);
   const unpaidPlayers=evPlayers.filter(p=>!p?.paid);
   const denominator=ev?.maxPlayers>0?ev.maxPlayers:(evPlayers.length||1);
-  const perPerson=total>0?Math.ceil(total/denominator):0;
+  const perPerson=ev.feePerPerson>0?ev.feePerPerson:(total>0?Math.ceil(total/denominator):0);
   const collected=paidPlayers.reduce((s,p)=>s+(p.paidAmount||perPerson),0);
   const profit=collected-total;
 
@@ -3426,7 +3426,7 @@ function App(){
 
     const total=(Number(activeEvent.courtFee)||0)+(Number(activeEvent.extraFee)||0);
     const ciCount=stateRef.current.players.filter(p=>p?.checkedIn).length||1;
-    const perPerson=total>0?Math.ceil(total/ciCount):0;
+    const perPerson=activeEvent.feePerPerson>0?activeEvent.feePerPerson:(total>0?Math.ceil(total/ciCount):0);
     const resetPlayers = serializePlayers(stateRef.current.players.map(x=>{
       if(!x?.name) return {...x,checkedIn:false};
       const addSpent=x.checkedIn&&x.paid?(x.paidAmount||perPerson):0;
@@ -3936,7 +3936,7 @@ function App(){
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <input id="custom-ann" placeholder="Hoặc tự gõ thông báo..." style={{flex:1,...iS({fontSize:14})}} />
+            <input id="custom-ann" placeholder="Hoặc tự gõ thông báo..." style={{flex:1,padding:"12px",borderRadius:12,border:`1px solid ${G.border}`,background:G.card,color:G.text,fontSize:14,outline:"none"}} />
             <button onClick={()=>{const el=document.getElementById("custom-ann");if(el&&el.value){setAnnouncement(el.value);saveAll({announcement:el.value});showT("Đã phát!");setModal(null);}}} style={{...bP,padding:"0 16px"}}>Phát</button>
           </div>
           <div style={{marginTop:16,display:"flex",gap:8}}>
