@@ -1,26 +1,26 @@
 import type { CSSProperties } from 'react';
-// ── Core palette (khớp app cũ)
+// ── Core palette (Pickleball Hub — Deep Navy + Cyan)
 export const G = {
-  bg:     "#060c18",
-  panel:  "#0b1524",
-  card:   "#0f1e33",
-  border: "#172840",
-  accent: "#00c9a7",
-  blue:   "#3b82f6",
-  gold:   "#f59e0b",
-  red:    "#f43f5e",
-  purple: "#a78bfa",
-  pink:   "#f472b6",
-  text:   "#dde6f5",
-  muted:  "#4a6480",
-  dim:    "#223044",
+  bg:     "#0a1628",
+  panel:  "#111e30",
+  card:   "#152035",
+  border: "#1e3050",
+  accent: "#00e5ff",   // cyan
+  blue:   "#1565c0",
+  gold:   "#ffc107",
+  red:    "#ef5350",
+  purple: "#7c4dff",
+  pink:   "#f48fb1",
+  text:   "#e8f4fd",
+  muted:  "#4a6882",
+  dim:    "#253d55",
 };
 
 // ── Skill system
 export const SKILL_LEVELS = ["2.0","2.5","3.0","3.5","3.5+"] as const;
 export type SkillLevel = typeof SKILL_LEVELS[number];
 export const SKILL_COLOR: Record<string,string> = {
-  "2.0":"#94a3b8", "2.5":"#60a5fa", "3.0":"#34d399", "3.5":"#f59e0b", "3.5+":"#f43f5e"
+  "2.0":"#8baab8", "2.5":"#4fc3f7", "3.0":"#26a69a", "3.5":"#ffa726", "3.5+":"#ef5350"
 };
 export const SKILL_DESC: Record<string,string> = {
   "2.0":"Mới bắt đầu", "2.5":"Cơ bản", "3.0":"Trung bình", "3.5":"Khá tốt", "3.5+":"Nâng cao"
@@ -31,43 +31,45 @@ export const SKILL_ELO: Record<string,number> = {
 
 // ── Dtype system
 export const DTYPE_OPT = [
-  {val:"mixed", label:"⚥ Nam-Nữ",  desc:"1 nam+1 nữ", color:"#a78bfa"},
-  {val:"male",  label:"♂ Đôi Nam", desc:"Toàn nam",   color:"#60a5fa"},
-  {val:"female",label:"♀ Đôi Nữ", desc:"Toàn nữ",    color:"#f472b6"},
-  {val:"any",   label:"⭐ Mix",    desc:"Bất kỳ",     color:"#00c9a7"},
+  {val:"mixed", label:"⚥ Nam-Nữ",  desc:"1 nam+1 nữ", color:"#7c4dff"},
+  {val:"male",  label:"♂ Đôi Nam", desc:"Toàn nam",   color:"#4fc3f7"},
+  {val:"female",label:"♀ Đôi Nữ", desc:"Toàn nữ",    color:"#f48fb1"},
+  {val:"any",   label:"⭐ Mix",    desc:"Bất kỳ",     color:"#00e5ff"},
 ] as const;
 
 // ── SEPC Tier system
 export const getTier = (k: number) => {
-  if(k<0)  return {name:"Hạng Chì", color:"#4a6480", next:0,    prev:-50, icon:"⚙️"};
+  if(k<0)  return {name:"Hạng Chì", color:"#4a6882", next:0,    prev:-50, icon:"⚙️"};
   if(k<15) return {name:"Đồng",     color:"#cd7f32", next:15,   prev:0,   icon:"🥉"};
   if(k<35) return {name:"Bạc",      color:"#c0c0c0", next:35,   prev:15,  icon:"🥈"};
   if(k<70) return {name:"Vàng",     color:"#ffd700", next:70,   prev:35,  icon:"🥇"};
-  return           {name:"Elite",    color:"#00c9a7", next:null, prev:70,  icon:"💎"};
+  return           {name:"Elite",   color:"#00e5ff", next:null, prev:70,  icon:"💎"};
 };
 
 // ── Roles
 export const ROLES = {SA:"super_admin", HOST:"host", VIEWER:"viewer"} as const;
 
-// ── Component style presets (inline style objects)
+// ── Component style presets (inline style objects — match new CSS vars)
 export const iS: CSSProperties = {
-  background: G.card, border: `1px solid ${G.border}`, borderRadius: 8,
-  padding: "8px 12px", color: G.text, fontSize: 13, outline: "none",
-  width: "100%", boxSizing: "border-box",
+  background: "#0d1e35", border: "1px solid #1e3050", borderRadius: 8,
+  padding: "9px 12px", color: "#e8f4fd", fontSize: 13, outline: "none",
+  width: "100%", boxSizing: "border-box", fontFamily: "inherit",
 };
 export const bP: CSSProperties = {
-  padding: "8px 14px", borderRadius: 8, border: "none",
-  background: `linear-gradient(135deg,${G.accent},${G.blue})`,
+  padding: "9px 18px", borderRadius: 8, border: "none",
+  background: "linear-gradient(90deg,#00bcd4,#1565c0)",
   color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12,
+  letterSpacing: "0.4px", boxShadow: "0 4px 15px rgba(0,188,212,0.25)",
 };
 export const bS: CSSProperties = {
-  padding: "6px 11px", borderRadius: 8, border: `1px solid ${G.border}`,
-  background: "transparent", color: G.muted, fontWeight: 600, cursor: "pointer", fontSize: 11,
+  padding: "7px 14px", borderRadius: 8, border: "1px solid #1e3050",
+  background: "transparent", color: "#4a6882", fontWeight: 600, cursor: "pointer", fontSize: 11,
 };
 export const bR: CSSProperties = {
-  padding: "5px 9px", borderRadius: 7, border: `1px solid ${G.red}44`,
-  background: "transparent", color: G.red, fontWeight: 600, cursor: "pointer", fontSize: 10,
+  padding: "5px 10px", borderRadius: 7, border: "1px solid rgba(239,83,80,0.35)",
+  background: "transparent", color: "#ef5350", fontWeight: 600, cursor: "pointer", fontSize: 10,
 };
+
 
 // ── Utils
 export const safe = (v: any): string => (v && typeof v === "string") ? v : "";

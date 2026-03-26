@@ -1399,28 +1399,55 @@ function CourtCard({court,elapsed,onScore,onAssign,next,readOnly,onSub,courtIdx,
 function QRow({q,idx,courts,onAssign,onRemove,readOnly}){
   const free=courts.filter(c=>!c.match);
   const diff=Math.abs(teamElo(q.team1||[])-teamElo(q.team2||[]));
-  const PTag=({p,teamColor})=>{
+  // Wait time in minutes
+  const waitMins=q.queuedAt?Math.floor((Date.now()-q.queuedAt)/60000):null;
+  const PlayerRow=({p,align="left"})=>{
     const wr=(p.gamesPlayed||0)?Math.round((p.wins||0)/(p.gamesPlayed||1)*100):null;
-    return <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"2px 6px",border:`1px solid ${SKILL_COLOR[p.skill]||G.border}33`}}>
-      <PlayerAvatar name={p.name} size={18} color={p.avatarColor} avatarImg={p.avatarImg}/>
-      <span style={{fontSize:12,fontWeight:900,color:teamColor||G.text,maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textTransform:"capitalize",letterSpacing:0.2}}>{safe(p.name)}</span>
-      <span style={{fontSize:9,fontWeight:800,color:SKILL_COLOR[p.skill]||G.muted}}>Trình độ: {p.skill||"?"}</span>
-      {wr!==null&&<span style={{fontSize:9,color:wr>=50?G.accent:G.red,fontWeight:800}}>Tỉ lệ thắng: {wr}%</span>}
-    </span>;
+    const sc=SKILL_COLOR[p.skill]||G.muted;
+    return <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:align==="right"?"flex-end":"flex-start"}}>
+      {align==="right"&&<>
+        {wr!==null&&<span style={{fontSize:9,fontWeight:700,color:wr>=50?G.accent:G.red}}>{wr}%</span>}
+        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 5px",borderRadius:4}}>{p.skill||"?"}</span>
+        <span style={{fontSize:12,fontWeight:700,color:G.text,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
+        <PlayerAvatar name={p.name} size={20} color={p.avatarColor} avatarImg={p.avatarImg}/>
+      </>}
+      {align==="left"&&<>
+        <PlayerAvatar name={p.name} size={20} color={p.avatarColor} avatarImg={p.avatarImg}/>
+        <span style={{fontSize:12,fontWeight:700,color:G.text,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</span>
+        <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"20",padding:"1px 5px",borderRadius:4}}>{p.skill||"?"}</span>
+        {wr!==null&&<span style={{fontSize:9,fontWeight:700,color:wr>=50?G.accent:G.red}}>{wr}%</span>}
+      </>}
+    </div>;
   };
-  return <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:10,background:G.card,border:`1px solid ${q.custom?G.purple+"44":q.coupleMatch?G.pink+"44":G.border}`}}>
-    <span style={{fontSize:9,fontWeight:700,color:G.muted,minWidth:14}}>#{idx+1}</span>
-    {q.custom&&<Chip label="✏️" color={G.purple} sm/>}{q.coupleMatch&&<Chip label="💑" color={G.pink} sm/>}
-    <DBadge dtype={q.dtype}/>
-    <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:3,alignItems:"center"}}>
-      {(q.team1||[]).filter(Boolean).map(p=><PTag key={p.id} p={p} teamColor={G.accent}/>)}
-      <span style={{fontSize:9,fontWeight:900,color:G.muted}}>vs</span>
-      {(q.team2||[]).filter(Boolean).map(p=><PTag key={p.id} p={p} teamColor={G.gold}/>)}
-      <Chip label={`Δ${diff}`} color={diff<40?G.accent:G.gold} sm/>
+  return <div style={{borderRadius:12,background:G.card,border:`1px solid ${q.custom?G.purple+"55":q.coupleMatch?G.pink+"55":G.border}`,overflow:"hidden"}}>
+    {/* Top bar */}
+    <div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderBottom:`1px solid ${G.border}22`,background:"rgba(255,255,255,0.02)"}}>
+      <span style={{fontSize:9,fontWeight:700,color:G.muted}}>#{idx+1}</span>
+      <DBadge dtype={q.dtype}/>
+      {q.custom&&<Chip label="✏️" color={G.purple} sm/>}
+      {q.coupleMatch&&<Chip label="💑" color={G.pink} sm/>}
+      <div style={{display:"flex",alignItems:"center",gap:5,marginLeft:"auto"}}>
+        {waitMins!==null&&<span style={{fontSize:9,fontWeight:700,color:waitMins>10?G.red:waitMins>5?G.gold:G.muted,background:"rgba(255,255,255,0.05)",padding:"1px 6px",borderRadius:4}}>⏱ {waitMins}'</span>}
+        <span style={{fontSize:9,fontWeight:700,color:diff<40?G.accent:G.gold,background:diff<40?G.accent+"18":G.gold+"18",padding:"1px 6px",borderRadius:4}}>Δ{diff}</span>
+      </div>
     </div>
-    {!readOnly&&<div style={{display:"flex",gap:3}}>
-      {free.slice(0,2).map(c=><button key={c.id} onClick={()=>onAssign(c.id,q)} style={{padding:"3px 7px",borderRadius:6,border:"none",background:G.accent,color:"#0B0F14",cursor:"pointer",fontWeight:800,fontSize:9}}>▶{c.name.replace("Sân ","S")}</button>)}
-      {onRemove&&<button onClick={onRemove} style={{padding:"3px 6px",borderRadius:5,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,cursor:"pointer",fontSize:9}}>✕</button>}
+    {/* Teams: 3-col grid (Team A | VS | Team B) */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 28px 1fr",alignItems:"center"}}>
+      <div style={{padding:"8px 10px",display:"flex",flexDirection:"column",gap:4}}>
+        {(q.team1||[]).filter(Boolean).map(p=><PlayerRow key={p.id} p={p} align="left"/>)}
+      </div>
+      <div style={{textAlign:"center",borderLeft:`1px solid ${G.border}44`,borderRight:`1px solid ${G.border}44`,padding:"4px 0",alignSelf:"stretch",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{fontSize:9,fontWeight:900,color:G.muted}}>VS</div>
+      </div>
+      <div style={{padding:"8px 10px",display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end"}}>
+        {(q.team2||[]).filter(Boolean).map(p=><PlayerRow key={p.id} p={p} align="right"/>)}
+      </div>
+    </div>
+    {/* Bottom action row */}
+    {!readOnly&&<div style={{display:"flex",gap:5,padding:"6px 10px",borderTop:`1px solid ${G.border}22`,background:"rgba(255,255,255,0.01)"}}>
+      {free.slice(0,3).map(c=><button key={c.id} onClick={()=>onAssign(c.id,q)} style={{flex:1,padding:"5px 4px",borderRadius:7,border:"none",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#0B0F14",cursor:"pointer",fontWeight:800,fontSize:10}}>▶ {c.name.replace("Sân ","S")}</button>)}
+      {!free.length&&<span style={{fontSize:9,color:G.dim,flex:1,textAlign:"center"}}>Không có sân trống</span>}
+      {onRemove&&<button onClick={onRemove} style={{padding:"5px 8px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,cursor:"pointer",fontSize:10,fontWeight:700}}>✕</button>}
     </div>}
   </div>;
 }
@@ -3535,7 +3562,7 @@ function App(){
     });
     for(const dt of["mixed","male","female","any"]){const p2=pool.filter(p=>!used.has(p.id));if(p2.length<4)break;const m=genMatch(p2,history,dt,stateRef.current.accounts?.algo);if(m){newM.push(m);[...m.team1,...m.team2].forEach(p=>used.add(p.id));}}
     if(!newM.length){showT("Không tạo được trận!","warn");return;}
-    setQueue(p=>[...p,...newM]);showT(`Đã thêm ${newM.length} trận ⚡`);
+    const ts=Date.now();setQueue(p=>[...p,...newM.map(m=>({...m,queuedAt:ts}))]);showT(`Đã thêm ${newM.length} trận ⚡`);
   };
 
   const [matchNotifs,setMatchNotifs]=useState([]);
@@ -3775,7 +3802,7 @@ function App(){
 
     {/* MODALS */}
     {modal==="qr"       &&<QRModal players={players} onRegister={handleRegister} onCheckInAll={handleCheckInAll} onClose={()=>setModal(null)} activeEvent={activeEvent}/>}
-    {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
+    {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true,queuedAt:Date.now()}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
     {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts} onSaveAccounts={newAcc=>saveAll({accounts:newAcc})}/>}
     {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts}/>}

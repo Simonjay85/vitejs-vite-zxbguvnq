@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import {
-  G, iS, bP, bS, ROLES, DTYPE_OPT, safe, sepc, uid, rng,
+  G, iS, bP, bS, bR, ROLES, DTYPE_OPT, safe, sepc, uid, rng,
   skillElo, genCode, teamElo
 } from '../../shared/theme';
 import { Chip, RBadge } from '../../shared/components/Badge';
@@ -257,46 +257,57 @@ export default function AdminDashboard() {
       {profileTarget&&<PlayerProfileModal p={players.find((x:any)=>x.id===profileTarget)} history={history} onClose={()=>setProfileTarget(null)} isSA={isSA} onUpdatePlayer={(px:any)=>setPlayers(prev=>prev.map((x:any)=>x.id===px.id?px:x))} toast={showT}/>}
 
       {/* HEADER */}
-      <header style={{height:54,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px',background:G.panel,borderBottom:`1px solid ${G.border}`,position:'sticky',top:0,zIndex:200}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>🏓</div>
+      <header className="app-header">
+        <div className="app-logo">
+          <div className="app-logo__icon">🏓</div>
           <div>
-            <div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:'#fff',lineHeight:1,display:'flex',alignItems:'center',gap:6}}>
-              PICKLEBALL OS <span title={saving?'Đang lưu...':'Đã lưu'} style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:saving?'#f59e0b':'#00c9a7',boxShadow:saving?'0 0 6px #f59e0b88':'0 0 6px #00c9a744'}}/>
+            <div className="app-logo__name">
+              PICKLEBALL HUB
+              <span title={saving?'Đang lưu...':'Đã lưu'} style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:saving?'#ffc107':'#00e676',boxShadow:saving?'0 0 6px #ffc10788':'0 0 6px #00e67644',marginLeft:8,verticalAlign:'middle'}}/>
             </div>
-            <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{safe(me.name).toUpperCase()} · {activeEvent?activeEvent.name:'Chưa có event'}</div>
+            <div className="app-logo__sub">{safe(me.name).toUpperCase()} · {activeEvent?activeEvent.name:'Chưa có event'}</div>
           </div>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-          <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
-          <Chip label={`🔴 ${courts.filter(c=>c.match).length} live`} color={G.gold}/>
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          <span className="chip chip-cyan">✅ {players.filter((p:any)=>p?.checkedIn).length} check-in</span>
+          <span className="chip chip-live">🔴 {courts.filter((c:any)=>c.match).length} live</span>
           <RBadge role={me.role}/>
-          <span onClick={()=>setModal('admin')} style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:G.gold+'20',color:G.gold,border:`1px solid ${G.gold}40`,fontWeight:700,cursor:'pointer'}}>👁 {accounts?.viewerCode||'???'}</span>
+          <span onClick={()=>setModal('admin')} style={{fontSize:11,padding:'3px 9px',borderRadius:5,background:'rgba(255,193,7,0.12)',color:G.gold,border:'1px solid rgba(255,193,7,0.25)',fontWeight:700,cursor:'pointer',letterSpacing:1}}>
+            👁 {accounts?.viewerCode||'???'}
+          </span>
           {activeEvent
-            ?<div style={{display:'flex',gap:4,alignItems:'center',padding:'3px 9px',borderRadius:7,background:G.accent+'15',border:`1px solid ${G.accent}44`}}>
-              <span style={{fontSize:10,color:G.accent,fontWeight:700}}>🗓️ {activeEvent.name}</span>
-              <button type="button" onClick={endEvent} style={{padding:'1px 6px',borderRadius:4,border:`1px solid ${G.red}44`,background:'transparent',color:G.red,cursor:'pointer',fontSize:9,fontWeight:700}}>✕</button>
-            </div>
-            :<button type="button" onClick={()=>setModal('newEvent')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:'6px 12px'}}>🗓️ Tạo Event</button>}
-          <button type="button" onClick={()=>setTvMode(true)} style={bS}>📺</button>
-          <button type="button" onClick={()=>setModal('couple')} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`}}>💑</button>
-          <button type="button" onClick={()=>setModal('qr')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11}}>📷 QR</button>
-          {isSA&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>⚙️</button>}
+            ?<div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 10px',borderRadius:8,background:'rgba(0,229,255,0.08)',border:'1px solid rgba(0,229,255,0.25)'}}>
+               <div className="ready-dot"/>
+               <span style={{fontSize:11,color:G.accent,fontWeight:700}}>{activeEvent.name}</span>
+               <button type="button" onClick={endEvent} style={{...bR,padding:'1px 5px',fontSize:9,marginLeft:2}}>✕</button>
+             </div>
+            :<button type="button" onClick={()=>setModal('newEvent')} style={{...bP,fontSize:11}}>🗓️ Tạo Event</button>}
+          <button type="button" onClick={()=>setTvMode(true)} style={bS} title="TV Mode">📺</button>
+          <button type="button" onClick={()=>setModal('couple')} style={{...bS,color:G.pink,borderColor:'rgba(244,143,177,0.3)'}} title="Kết đôi">💑</button>
+          <button type="button" onClick={()=>setModal('qr')} style={bP}>📷 QR</button>
+          {isSA&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,color:G.gold,borderColor:'rgba(255,193,7,0.25)'}} title="Admin">⚙️</button>}
           <button type="button" onClick={()=>setMe(null)} style={bS}>← Đăng xuất</button>
         </div>
       </header>
 
       {/* Event alert */}
-      {!activeEvent&&<div style={{background:`linear-gradient(90deg,${G.gold}18,${G.purple}18)`,borderBottom:`1px solid ${G.gold}44`,padding:'8px 16px',display:'flex',alignItems:'center',gap:10}}>
-        <span style={{fontSize:11,color:G.gold}}>⚠️ Chưa có event nào đang chạy.</span>
-        <button type="button" onClick={()=>setModal('newEvent')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:'5px 14px'}}>🗓️ Tạo Event ngay</button>
-        <span style={{fontSize:10,color:G.dim}}>Tạo event để lưu lịch sử trận đấu theo ngày</span>
+      {!activeEvent&&<div className="event-alert">
+        <span style={{color:G.gold}}>⚠️</span>
+        <span style={{color:G.gold,fontWeight:700}}>Chưa có event nào đang chạy.</span>
+        <button type="button" onClick={()=>setModal('newEvent')} style={{...bP,fontSize:11}}>🗓️ Tạo Event ngay</button>
+        <span style={{color:G.muted,fontSize:11}}>Tạo event để lưu lịch sử trận đấu theo ngày.</span>
       </div>}
 
       {/* NAV */}
-      <nav style={{display:'flex',gap:2,padding:'4px 12px',background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:'auto'}}>
-        {TABS.map(t=>{const ac=t.id==='kiosk'?G.purple:t.id==='matchmaker'?G.blue:G.accent;const act=tab===t.id;
-          return <button key={t.id} type="button" onClick={()=>setTab(t.id)} style={{padding:'5px 12px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap',background:act?ac+'22':'transparent',color:act?ac:G.muted,borderBottom:act?`2px solid ${ac}`:'2px solid transparent'}}>{t.l}</button>;})}
+      <nav className="app-nav">
+        {TABS.map(t=>(
+          <button key={t.id} type="button" onClick={()=>setTab(t.id)}
+            className={`nav-tab${tab===t.id?' active':''}`}
+            style={tab===t.id&&t.id==='kiosk'?{color:G.purple,borderBottomColor:G.purple,background:`rgba(124,77,255,0.08)`}:
+                   tab===t.id&&t.id==='matchmaker'?{color:'#4fc3f7',borderBottomColor:'#4fc3f7',background:'rgba(79,195,247,0.08)'}:{}}>
+            {t.l}
+          </button>
+        ))}
       </nav>
 
       {/* CONTENT */}
