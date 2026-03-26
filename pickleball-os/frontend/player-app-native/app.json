@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Pickleball Hub",
+    "slug": "pickleball-player-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0a1628"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.pickleballhub.player"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a1628"
+      },
+      "package": "com.pickleballhub.player"
+    },
+    "plugins": [
+      "expo-camera",
+      [
+        "expo-linear-gradient"
+      ]
+    ]
+  }
+}
