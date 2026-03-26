@@ -687,7 +687,7 @@ function Login({accounts,players,onLogin,loading}){
           <span style={{fontSize:20}}>🎮</span> Đăng nhập Admin / Host
         </button>
         <button onClick={()=>{setMode("viewer");setErr("");}} style={{width:"100%",padding:"18px 24px",borderRadius:18,border:"2px solid #1E2A3A",background:"transparent",color:G.text,fontWeight:700,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
-          <span style={{fontSize:20}}>👁</span> Vào xem trực tiếp
+          <span style={{fontSize:20}}>👁</span> Đăng nhập vào event
         </button>
         <div style={{textAlign:"center",padding:"12px",borderRadius:12,background:"#111720",fontSize:10,color:G.muted}}>📱 Người chơi dùng mã cá nhân · Khán giả dùng mã chung</div>
       </div>}
@@ -703,7 +703,7 @@ function Login({accounts,players,onLogin,loading}){
         <div style={{marginTop:12,padding:"8px 12px",borderRadius:8,background:G.card,fontSize:10,color:G.dim}}>Mặc định: <span style={{color:G.accent}}>Super Admin</span> / <span style={{color:G.accent}}>admin2024</span></div>
       </div>}
       {mode==="viewer"&&<div style={{background:"#111720",borderRadius:20,padding:28,border:"2px solid rgba(0,255,178,0.2)",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
-        <div style={{fontSize:16,fontWeight:900,color:G.accent,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>👁 Vào xem trực tiếp</div>
+        <div style={{fontSize:16,fontWeight:900,color:G.accent,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>👁 Đăng nhập vào event</div>
         <div style={{fontSize:11,color:G.muted,marginBottom:20}}>Dùng mã cá nhân (sau check-in) hoặc mã chung do Host cấp</div>
         <Fld label="MÃ TRUY CẬP (SỐ)">
           <input type="tel" pattern="[0-9]*" value={code} onChange={e=>{setCode(e.target.value.replace(/[^0-9]/g,''));setErr("");}} placeholder="VD: 123456" maxLength={6}
@@ -711,7 +711,7 @@ function Login({accounts,players,onLogin,loading}){
         </Fld>
         {err&&<div style={{color:G.red,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,background:G.red+"12"}}>{err}</div>}
         <div style={{display:"flex",gap:8}}>
-          <button onClick={tryViewer} disabled={checking} style={{...bP,flex:1,padding:"11px 0",background:`linear-gradient(135deg,${G.gold},${G.red})`,opacity:checking?0.6:1}}>{checking?"⏳ Đang kiểm tra...":"Vào xem 👁"}</button>
+          <button onClick={tryViewer} disabled={checking} style={{...bP,flex:1,padding:"11px 0",background:`linear-gradient(135deg,${G.gold},${G.red})`,opacity:checking?0.6:1}}>{checking?"⏳ Đang kiểm tra...":"Đăng nhập vào event 👁"}</button>
           <button onClick={()=>{setMode("choose");setErr("");}} style={bS}>← Quay lại</button>
         </div>
       </div>}
@@ -2066,7 +2066,7 @@ function EventsViewer({events, activeEventId, players, me}){
     {showQR&&(()=>{const ev=events.find(e=>e.id===showQR);if(!ev)return null;
       const total=(Number(ev.courtFee)||0)+(Number(ev.extraFee)||0);
       const ci=players.filter(p=>p?.checkedIn).length||1;
-      const per=total>0?Math.ceil(total/ci):ev.feePerPerson||0;
+      const per=ev.feePerPerson>0?ev.feePerPerson:(total>0?Math.ceil(total/ci):0);
       return <div style={{position:"fixed",inset:0,zIndex:600,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{background:"#111720",borderRadius:20,padding:28,width:"100%",maxWidth:360,border:"1px solid rgba(245,158,11,0.3)",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
           <div style={{fontSize:16,fontWeight:900,color:G.gold,marginBottom:4}}>🎟 Đặt chỗ — {ev.name}</div>
@@ -2090,7 +2090,7 @@ function EventsViewer({events, activeEventId, players, me}){
         const expanded=showDetail===ev.id;
         const total=(Number(ev.courtFee)||0)+(Number(ev.extraFee)||0);
         const ci=players.filter(p=>p?.checkedIn).length||1;
-        const per=total>0?Math.ceil(total/ci):ev.feePerPerson||0;
+        const per=ev.feePerPerson>0?ev.feePerPerson:(total>0?Math.ceil(total/ci):0);
         const modeLbl=GAME_MODE_LABELS[ev.gameMode||"normal"]||"Thường";
         return <div key={ev.id} style={{background:isActive?"rgba(0,255,178,0.05)":"#111720",border:`1px solid ${isActive?"rgba(0,255,178,0.3)":"#1E2A3A"}`,borderRadius:18,padding:16,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
           {/* Header */}
@@ -3256,7 +3256,8 @@ function App(){
         createdAt:p.createdAt, phone:p.phone||"", note:p.note||"", sepc:p.sepc||0,
         checkedIn: p.checkedIn === true, // ← lưu đúng boolean
         paid:p.paid||false, paidAmount:p.paidAmount||0, payMethod:p.payMethod||"transfer",
-        totalSpent:p.totalSpent||0, monthSpent:p.monthSpent||0, eventCount:p.eventCount||0
+        totalSpent:p.totalSpent||0, monthSpent:p.monthSpent||0, eventCount:p.eventCount||0,
+        viewerCode: p.viewerCode || null, paymentInfo: p.paymentInfo || null
       })),
       courts: st.courts.map(c=>({
         ...c, _startedAt: c.startedAt || null
@@ -3922,6 +3923,29 @@ function App(){
     {modal==="custom"   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true,queuedAt:Date.now()}]);setModal(null);showT("Custom ✏️");}} onClose={()=>setModal(null)}/>}
     {modal==="couple"   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
     {modal==="admin"    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT} numCourts={numCourts} setNumCourts={setNumCourts} onSaveAccounts={newAcc=>saveAll({accounts:newAcc})}/>}
+    {modal==="announcement" && (
+      <div style={{position:"fixed",inset:0,zIndex:999,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{background:G.panel,borderRadius:20,width:"100%",maxWidth:500,padding:24,border:`1px solid ${G.border}`}}>
+          <h3 style={{marginTop:0,color:G.accent}}>📢 Chọn câu Thông báo nhanh</h3>
+          <div style={{fontSize:13,color:G.muted,marginBottom:16}}>Thông báo sẽ hiện ngay trên màn hình TV và ứng dụng người chơi.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+            {["Sắp tới phần trao giải, mời mọi người tập hợp!","Xin mời Cúp Vàng và Cúp Bạc vào sân chuẩn bị!","Xin các VĐV nộp hình ảnh Bill chuyển khoản để xác nhận!","Xe máy xin vui lòng dắt sang bãi kế bên!"].map(txt=>(
+               <button key={txt} onClick={()=>{setAnnouncement(txt);saveAll({announcement:txt});showT("Đã phát thông báo!");setModal(null);}} style={{...bS,textAlign:"left",padding:"12px",fontSize:14,border:`1px solid ${G.border}`,color:G.text}}>
+                 {txt}
+               </button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input id="custom-ann" placeholder="Hoặc tự gõ thông báo..." style={{flex:1,...iS({fontSize:14})}} />
+            <button onClick={()=>{const el=document.getElementById("custom-ann");if(el&&el.value){setAnnouncement(el.value);saveAll({announcement:el.value});showT("Đã phát!");setModal(null);}}} style={{...bP,padding:"0 16px"}}>Phát</button>
+          </div>
+          <div style={{marginTop:16,display:"flex",gap:8}}>
+             <button onClick={()=>{setAnnouncement("");saveAll({announcement:""});showT("Đã xoá thông báo hiện tại.");setModal(null);}} style={{...bS,flex:1,color:G.red,border:`1px solid ${G.red}44`}}>Tắt thông báo đang chạy</button>
+             <button onClick={()=>setModal(null)} style={{...bS,flex:1}}>Đóng</button>
+          </div>
+        </div>
+      </div>
+    )}
     {modal==="newEvent" &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts}/>}
     {modal==="editEvent"&&activeEvent&&<EventModal isNew={false} event={activeEvent} onClose={()=>setModal(null)} currentNumCourts={numCourts} onSave={ev=>{
       const newEvs=stateRef.current.events.map(e=>e.id===ev.id?ev:e);
@@ -4077,6 +4101,35 @@ function App(){
       <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:"5px 14px"}}>🗓️ Tạo Event ngay</button>
       <span style={{fontSize:10,color:G.dim}}>Tạo event để lưu lịch sử trận đấu theo ngày</span>
     </div>}
+
+    {/* PAYMENT ALERTS BANNER (HOST) */}
+    {paymentAlerts.length > 0 && (me.role === ROLES.SA || me.role === ROLES.HOST) && (
+      <div style={{background:G.gold+"18", borderBottom:`1px solid ${G.gold}44`, padding:"10px 16px"}}>
+        <div style={{fontSize:11, fontWeight:800, color:G.gold, marginBottom:8, display:"flex", alignItems:"center", gap:6}}>
+          <span>💰 CÓ {paymentAlerts.length} YÊU CẦU XÁC NHẬN THANH TOÁN</span>
+          <div style={{width:8, height:8, borderRadius:"50%", background:G.red, animation:"pulse-neon 1.5s infinite"}} />
+        </div>
+        <div style={{display:"flex", flexDirection:"column", gap:8}}>
+          {paymentAlerts.map(pa => (
+            <div key={pa.id} style={{background:G.card, borderRadius:12, border:`1px solid ${G.border}`, padding:12, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                <div style={{fontSize:24}}>{pa.method==="cash"?"💵":pa.method==="qr_auto"?"📱":"🧾"}</div>
+                <div>
+                  <div style={{fontSize:14, fontWeight:700, color:"#fff"}}>{pa.playerName}</div>
+                  <div style={{fontSize:11, color:G.muted, marginTop:2}}>{pa.method==="cash"?"Nộp tiền mặt":pa.method==="qr_auto"?"Quét QR Momo":"Upload biên lai"}</div>
+                </div>
+              </div>
+              <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                {pa.billBase64 && <button onClick={()=>{const w=window.open("","_blank");w?.document.write(`<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;"><img src="${pa.billBase64}" style="max-width:100%;max-height:100vh;object-fit:contain;"/></div>`);}} style={{...bS, color:G.accent, border:`1px solid ${G.accent}44`, padding:"6px 14px", fontSize:11}}>Xem Bill 🖼️</button>}
+                <button onClick={() => approvePayment(pa.id, pa.playerId)} style={{...bP, background:G.accent, color:"#000", padding:"6px 14px", fontSize:11}}>Đã nhận tiền ✅</button>
+                <button onClick={() => rejectPayment(pa.id)} style={{...bS, color:G.red, border:`1px solid ${G.red}44`, padding:"6px 14px", fontSize:11}}>Xoá ✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
     {/* CHALLENGE APPROVAL BANNER (HOST) */}
     {pendingChallenges.length > 0 && (me.role === ROLES.SA || me.role === ROLES.HOST) && (
       <div style={{background:G.purple+"18", borderBottom:`1px solid ${G.purple}44`, padding:"10px 16px"}}>
