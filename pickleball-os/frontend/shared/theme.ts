@@ -1,38 +1,129 @@
+// ── Core palette (khớp app cũ)
+export const G = {
+  bg:     "#060c18",
+  panel:  "#0b1524",
+  card:   "#0f1e33",
+  border: "#172840",
+  accent: "#00c9a7",
+  blue:   "#3b82f6",
+  gold:   "#f59e0b",
+  red:    "#f43f5e",
+  purple: "#a78bfa",
+  pink:   "#f472b6",
+  text:   "#dde6f5",
+  muted:  "#4a6480",
+  dim:    "#223044",
+};
+
+// ── Skill system
+export const SKILL_LEVELS = ["2.0","2.5","3.0","3.5","3.5+"] as const;
+export type SkillLevel = typeof SKILL_LEVELS[number];
+export const SKILL_COLOR: Record<string,string> = {
+  "2.0":"#94a3b8", "2.5":"#60a5fa", "3.0":"#34d399", "3.5":"#f59e0b", "3.5+":"#f43f5e"
+};
+export const SKILL_DESC: Record<string,string> = {
+  "2.0":"Mới bắt đầu", "2.5":"Cơ bản", "3.0":"Trung bình", "3.5":"Khá tốt", "3.5+":"Nâng cao"
+};
+export const SKILL_ELO: Record<string,number> = {
+  "2.0":1050, "2.5":1160, "3.0":1290, "3.5":1420, "3.5+":1570
+};
+
+// ── Dtype system
+export const DTYPE_OPT = [
+  {val:"mixed", label:"⚥ Nam-Nữ",  desc:"1 nam+1 nữ", color:"#a78bfa"},
+  {val:"male",  label:"♂ Đôi Nam", desc:"Toàn nam",   color:"#60a5fa"},
+  {val:"female",label:"♀ Đôi Nữ", desc:"Toàn nữ",    color:"#f472b6"},
+  {val:"any",   label:"⭐ Mix",    desc:"Bất kỳ",     color:"#00c9a7"},
+] as const;
+
+// ── SEPC Tier system
+export const getTier = (k: number) => {
+  if(k<0)  return {name:"Hạng Chì", color:"#4a6480", next:0,    prev:-50, icon:"⚙️"};
+  if(k<15) return {name:"Đồng",     color:"#cd7f32", next:15,   prev:0,   icon:"🥉"};
+  if(k<35) return {name:"Bạc",      color:"#c0c0c0", next:35,   prev:15,  icon:"🥈"};
+  if(k<70) return {name:"Vàng",     color:"#ffd700", next:70,   prev:35,  icon:"🥇"};
+  return           {name:"Elite",    color:"#00c9a7", next:null, prev:70,  icon:"💎"};
+};
+
+// ── Roles
+export const ROLES = {SA:"super_admin", HOST:"host", VIEWER:"viewer"} as const;
+
+// ── Component style presets (inline style objects)
+export const iS: React.CSSProperties = {
+  background: G.card, border: `1px solid ${G.border}`, borderRadius: 8,
+  padding: "8px 12px", color: G.text, fontSize: 13, outline: "none",
+  width: "100%", boxSizing: "border-box",
+};
+export const bP: React.CSSProperties = {
+  padding: "8px 14px", borderRadius: 8, border: "none",
+  background: `linear-gradient(135deg,${G.accent},${G.blue})`,
+  color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12,
+};
+export const bS: React.CSSProperties = {
+  padding: "6px 11px", borderRadius: 8, border: `1px solid ${G.border}`,
+  background: "transparent", color: G.muted, fontWeight: 600, cursor: "pointer", fontSize: 11,
+};
+export const bR: React.CSSProperties = {
+  padding: "5px 9px", borderRadius: 7, border: `1px solid ${G.red}44`,
+  background: "transparent", color: G.red, fontWeight: 600, cursor: "pointer", fontSize: 10,
+};
+
+// ── Utils
+export const safe = (v: any): string => (v && typeof v === "string") ? v : "";
+export const uid  = () => Math.random().toString(36).slice(2,9).toUpperCase();
+export const rng  = (a: number, b: number) => Math.floor(Math.random()*(b-a+1))+a;
+export const nowStr   = () => new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
+export const todayStr = () => new Date().toLocaleDateString("vi-VN",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
+export const genCode  = () => String(Math.floor(100000 + Math.random() * 900000));
+export const teamElo  = (t: any[]): number => t?.length ? Math.round(t.reduce((s,p) => s+(p?.elo||0), 0)/t.length) : 0;
+export const skillElo = (s: string): number => (SKILL_ELO[s]||1200)+rng(-50,50);
+export const validScore = (a: number, b: number): boolean => {
+  if(isNaN(a)||isNaN(b)||a<0||b<0||a===b) return false;
+  const w=Math.max(a,b), l=Math.min(a,b);
+  return l<10 ? w===11 : w-l===2;
+};
+export const getWinner = (a: number, b: number): number|null => validScore(a,b) ? (a>b?1:2) : null;
+
+export function sepc(player: any, history: any[]): number {
+  if(!player||!history) return 0;
+  let k=0;
+  history.forEach(h => {
+    if(!h?.team1||!h?.team2) return;
+    const in1=h.team1.some((p:any)=>p?.id===player.id), in2=h.team2.some((p:any)=>p?.id===player.id);
+    if(!in1&&!in2) return;
+    const won=(in1&&h.winner===1)||(in2&&h.winner===2);
+    const my=(in1?h.team1:h.team2).filter(Boolean), opp=(in1?h.team2:h.team1).filter(Boolean);
+    const diff=teamElo(opp)-teamElo(my), margin=Math.abs((h.scoreWinner||11)-(h.scoreLoser||0));
+    let pts=won?10:-3; pts+=(diff/100)*(won?4:-2); pts+=won?Math.min(margin*0.5,4):-(margin*0.2);
+    k+=pts;
+  });
+  return Math.round(k*10)/10;
+}
+
+// ── Legacy Theme export (backwards compat)
 export const Theme = {
   colors: {
-    bg: "#0B1220",
-    panel: "rgba(17,24,39,0.7)",
-    card: "rgba(17,24,39,0.5)",
-    border: "rgba(148,163,184,0.15)",
-    text: {
-      primary: "#F8FAFC",
-      muted: "#94A3B8",
-      dim: "#64748B"
-    },
+    bg: G.bg,
+    panel: G.panel,
+    card: G.card,
+    border: G.border,
+    text: { primary: G.text, muted: G.muted, dim: G.dim },
     accent: {
-      neonGreen: "#00FFA3",
-      cyan: "#00E0FF",
-      gradient: "linear-gradient(135deg, #00E0FF, #00FFA3)",
-      glow: "rgba(0,255,163,0.15)",
-      gold: "#F59E0B"
+      neonGreen: G.accent,
+      cyan: G.blue,
+      gradient: `linear-gradient(135deg, ${G.accent}, ${G.blue})`,
+      glow: G.accent+"25",
+      gold: G.gold,
     },
-    status: {
-      win: "#22C55E",
-      lose: "#EF4444",
-      warning: "#F59E0B",
-      info: "#3B82F6"
-    }
+    status: { win: "#22C55E", lose: G.red, warning: G.gold, info: G.blue }
   },
   shadows: {
-    glow: "0 8px 32px rgba(0,255,163,0.15)",
+    glow: `0 8px 32px ${G.accent}25`,
     card: "0 4px 16px rgba(0,0,0,0.2)",
-    panel: "0 20px 60px rgba(0,224,255,0.08)"
+    panel: `0 20px 60px ${G.blue}14`
   },
-  radii: {
-    sm: "8px",
-    md: "12px",
-    lg: "16px",
-    xl: "24px",
-    full: "9999px"
-  }
+  radii: { sm: "8px", md: "12px", lg: "16px", xl:"24px", full: "9999px" }
 };
+
+import React from 'react';
+

@@ -1,0 +1,73 @@
+/* ─── Global Reset & Base ─── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:#060c18;
+  color:#dde6f5;
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  line-height:1.5;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* ─── CSS Variables ─── */
+:root{
+  --accent:#00c9a7;
+  --blue:#3b82f6;
+  --gold:#f59e0b;
+  --red:#f43f5e;
+  --purple:#a78bfa;
+  --pink:#f472b6;
+  --bg:#060c18;
+  --panel:#0b1524;
+  --card:#0f1e33;
+  --border:#172840;
+  --text:#dde6f5;
+  --muted:#4a6480;
+  --dim:#223044;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:6px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.18);}
+
+/* ─── Input / Select focus ─── */
+input,select,textarea{
+  font-family:inherit;
+  transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+  -webkit-appearance:none;
+  appearance:none;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--accent)!important;
+  box-shadow:0 0 0 3px rgba(0,201,167,0.15)!important;
+  outline:none;
+}
+
+/* ─── Button micro-interactions ─── */
+button{
+  font-family:inherit;
+  transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+  position:relative;
+  overflow:hidden;
+  -webkit-appearance:none;
+  appearance:none;
+}
+button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.12);box-shadow:0 6px 18px -4px rgba(0,0,0,0.5);}
+button:active:not(:disabled){transform:translateY(1px);filter:brightness(0.95);box-shadow:none;}
+button:disabled{opacity:0.45;cursor:not-allowed;filter:saturate(0.4);}
+
+/* ─── Utility classes ─── */
+.hscroll::-webkit-scrollbar{height:4px;}
+.hscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);}
+.card-float{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+.glass-inner{background:var(--card);border:1px solid rgba(255,255,255,0.03);border-radius:12px;}
+
+/* ─── Animations ─── */
+@keyframes tIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px);filter:blur(4px);}to{opacity:1;transform:translateY(0);filter:blur(0);}}
+@keyframes slideUp{from{opacity:0;transform:translateY(40px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pulse-neon{0%,100%{box-shadow:0 0 0 0 rgba(0,201,167,0.4);}50%{box-shadow:0 0 20px 8px rgba(0,201,167,0.25);}}
+@keyframes pulse{0%{opacity:.5;transform:scale(.95);}50%{opacity:.8;transform:scale(1);}100%{opacity:.5;transform:scale(.95);}}
+@keyframes spin{to{transform:rotate(360deg);}}

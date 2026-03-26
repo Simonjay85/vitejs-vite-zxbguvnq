@@ -1,406 +1,337 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Theme } from '../../shared/theme';
+import {
+  G, iS, bP, bS, ROLES, DTYPE_OPT, SKILL_LEVELS, safe, sepc, uid, rng,
+  skillElo, genCode, teamElo, validScore, getWinner
+} from '../../../shared/theme';
+import { Chip, RBadge, CBadge } from '../../../shared/components/Badge';
+import { Toast } from '../../../shared/components/Modal';
+import { CourtCard } from '../../../shared/components/CourtCard';
+import { ScoreModal } from '../../../shared/components/Modal';
+import Login from './Login';
+import { EventModal, QRModal, CustomModal, CoupleModal, AdminModal, ViewerChallengeModal } from './Modals';
+import { DashTab, PlayersTab, QueueTab, LeaderView, AnalyticsView, PlayerProfileModal } from './Tabs';
+import { HistoryTab, KioskTab, TVMode } from './MoreTabs';
+
+// ─ Seed data
+const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An"];
+const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu"];
+function buildSeed(dbPlayers: any[]|null) {
+  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
+  let mi=0,fi=0;
+  const mk=(g:string,sk:string,ci:boolean,dt:string)=>({id:uid(),name:g==='M'?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),viewerCode:genCode()});
+  return [mk('M','3.5+',true,'any'),mk('M','3.5+',true,'mixed'),mk('M','3.5',true,'any'),mk('F','3.5',true,'mixed'),mk('M','3.5',true,'male'),mk('F','3.5',true,'female'),mk('M','3.5',true,'mixed'),mk('F','3.5',false,'any'),mk('M','3.5',true,'any'),mk('F','3.0',true,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'male'),mk('F','3.0',false,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'female'),mk('M','3.0',false,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'mixed'),mk('M','2.5',true,'mixed'),mk('F','2.5',true,'any'),mk('M','2.5',true,'any'),mk('F','2.5',true,'mixed'),mk('M','2.5',false,'male'),mk('F','2.5',true,'any')].map(p=>({...p,wins:Math.round((p.gamesPlayed as number)*rng(35,65)/100)}));
+}
+const defaultAccounts = () => ({admins:[{id:'sa_root',name:'Super Admin',role:ROLES.SA,password:'admin2024'}],hosts:[],viewerCode:genCode()});
+const NCOURTS=5;
+
+// ─ Match generator
+function genMatch(pool:any[],history:any[],dtype:string) {
+  let cands=[...pool].filter(p=>p?.id&&p?.name);
+  if(dtype==='male') cands=cands.filter(p=>p.gender==='M');
+  else if(dtype==='female') cands=cands.filter(p=>p.gender==='F');
+  if(cands.length<4) return null;
+  const pri=(p:any)=>history.filter(h=>h?.team1&&h?.team2&&[...h.team1,...h.team2].some((x:any)=>x?.id===p.id)).length+(p.gamesPlayed||0)*0.5;
+  const top=[...cands].sort((a,b)=>pri(a)-pri(b)).slice(0,Math.min(cands.length,20));
+  let best:any=null,bs=Infinity;
+  for(let i=0;i<800;i++){
+    const sh=[...top].sort(()=>Math.random()-.5);const [a,b,c,d]=sh;
+    if(!a||!b||!c||!d)continue;
+    if(dtype==='male'&&[a,b,c,d].some((x:any)=>x.gender!=='M'))continue;
+    if(dtype==='female'&&[a,b,c,d].some((x:any)=>x.gender!=='F'))continue;
+    if(dtype==='mixed'&&!(a.gender!==b.gender&&c.gender!==d.gender))continue;
+    const rep=(a.lastPartners?.includes(b.id)?280:0)+(c.lastPartners?.includes(d.id)?280:0);
+    const diff=Math.abs(teamElo([a,b])-teamElo([c,d]));
+    const sc=rep+(diff<40?diff*.4:diff*2.5)+(pri(a)+pri(b)+pri(c)+pri(d))*1.2;
+    if(sc<bs){bs=sc;best={team1:[a,b],team2:[c,d],diff:Math.round(diff),dtype};}
+  }
+  return best;
+}
+
+const TABS=[
+  {id:'dashboard',l:'📊 Dashboard'},{id:'courts',l:'🏟️ 5 Sân'},{id:'players',l:'👥 Người chơi'},
+  {id:'queue',l:'⚔️ Queue'},{id:'leaderboard',l:'🏆 Xếp hạng'},{id:'history',l:'📋 Lịch sử'},
+  {id:'analytics',l:'📈 Analytics'},{id:'matchmaker',l:'🧠 AI Đề xuất'},{id:'kiosk',l:'📲 Kiosk'},
+];
 
 export default function AdminDashboard() {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [courts, setCourts] = useState<any[]>([]);
-  const [queue, setQueue] = useState<any[]>([]);
-  const [players, setPlayers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('live');
-  const [proposal, setProposal] = useState<any>(null);
-  const [qrName, setQrName] = useState('');
-  const [qrSkill, setQrSkill] = useState('3.0');
-  const [qrCheckedInMsg, setQrCheckedInMsg] = useState('');
-  const [kotMatchId, setKotMatchId] = useState('');
-  const SESSION_ID = 'SESSION_123';
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [me,setMe]=useState<any>(null);
+  const [accounts,setAccounts]=useState(defaultAccounts);
+  const [players,setPlayers]=useState(()=>buildSeed(null));
+  const [history,setHistory]=useState<any[]>([]);
+  const [courts,setCourts]=useState(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
+  const [queue,setQueue]=useState<any[]>([]);
+  const [pendingChallenges,setPendingChallenges]=useState<any[]>([]);
+  const [events,setEvents]=useState<any[]>([]);
+  const [activeEventId,setActiveEventId]=useState<string|null>(null);
+  const [tab,setTab]=useState('dashboard');
+  const [modal,setModal]=useState<string|null>(null);
+  const [scoreTarget,setScoreTarget]=useState<string|null>(null);
+  const [tvMode,setTvMode]=useState(false);
+  const [toast,setToast]=useState<any>(null);
+  const [elapsed,setElapsed]=useState<Record<string,number>>({});
+  const [profileTarget,setProfileTarget]=useState<string|null>(null);
+  // AI Matchmaker state
+  const [socket,setSocket]=useState<Socket|null>(null);
+  const [proposal,setProposal]=useState<any>(null);
+  const tickRef=useRef<any>();
 
-  const fetchSuggestion = async () => {
-    try {
-      const res = await fetch(`http://localhost:5000/api/admin/matches/suggest/${SESSION_ID}`);
-      const data = await res.json();
-      if (data.proposal) setProposal(data.proposal);
-      else alert('Không đủ người để xếp trận! (Cần 4 người)');
-    } catch (e) {
-      console.error(e);
-    }
+  // ─ Load from localStorage on mount
+  useEffect(()=>{
+    try{
+      const saved=localStorage.getItem('pb_os_state');
+      if(saved){const s=JSON.parse(saved);if(s.players?.length)setPlayers(buildSeed(s.players));if(s.history)setHistory(s.history);if(s.accounts)setAccounts(s.accounts);if(s.events)setEvents(s.events);if(s.activeEventId)setActiveEventId(s.activeEventId);if(s.queue)setQueue(s.queue);}
+    }catch{}
+    setLoading(false);
+  },[]);
+
+  // ─ Auto-save
+  const saveState=useCallback(()=>{
+    if(!me||me.role===ROLES.VIEWER)return;
+    setSaving(true);
+    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p,checkedIn:false})),history,accounts,events,activeEventId,queue}));}catch{}
+    setTimeout(()=>setSaving(false),400);
+  },[me,players,history,accounts,events,activeEventId,queue]);
+
+  useEffect(()=>{const t=setTimeout(saveState,800);return()=>clearTimeout(t);},[players,history,accounts,events,activeEventId,queue,pendingChallenges]);
+
+  // ─ Court timers
+  useEffect(()=>{
+    tickRef.current=setInterval(()=>{setElapsed(prev=>{const n={...prev};courts.forEach(c=>{if(c.match&&c.startedAt)n[c.id]=Math.floor((Date.now()-c.startedAt)/1000);});return n;});},1000);
+    return()=>clearInterval(tickRef.current);
+  },[courts]);
+
+  // ─ WebSocket for AI features
+  useEffect(()=>{
+    try{const s=io('http://localhost:5000',{timeout:2000});setSocket(s);s.on('queue:update',(d:any)=>{/* merge real-time queue */});s.on('court:assign',(d:any)=>{/* merge court updates */});return()=>{s.disconnect();};}catch{}
+  },[]);
+
+  const playIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map((p:any)=>p.id):[]));
+  const available=players.filter(p=>p&&p.checkedIn&&!playIds.has(p.id));
+  const activeEvent=events.find(e=>e.id===activeEventId)||null;
+  const showT=(msg:string,type='ok')=>setToast({msg,type});
+  const isSA=me?.role===ROLES.SA;
+  const SESSION_ID='SESSION_123';
+
+  // ─ Event management
+  const createEvent=(ev:any)=>{const ne=[...events,ev];setEvents(ne);setActiveEventId(ev.id);setHistory([]);setQueue([]);setPendingChallenges([]);setPlayers(p=>p.map((x:any)=>({...x,checkedIn:false})));showT(`🗓️ Event "${ev.name}" đã tạo!`);};
+  const editEvent=(ev:any)=>{setEvents(events.map(e=>e.id===ev.id?ev:e));showT('Event đã cập nhật ✏️');};
+  const endEvent=()=>{if(!activeEvent)return;showT(`Event "${activeEvent.name}" kết thúc 💾`);setActiveEventId(null);setHistory([]);setQueue([]);setPendingChallenges([]);setPlayers(p=>p.map((x:any)=>({...x,checkedIn:false})));};
+
+  const handleRegister=(data:any)=>{
+    setPlayers(prev=>{
+      const ex=prev.find((p:any)=>p.id===data.id);
+      let upd=ex?prev.map((p:any)=>p.id===data.id?{...p,...data,checkedIn:true,viewerCode:p.viewerCode||genCode()}:p):[...prev,{...data,checkedIn:true,viewerCode:data.viewerCode||genCode()}];
+      if(data.coupleWithId&&data.coupleId)upd=upd.map((p:any)=>p.id===data.coupleWithId?{...p,coupleId:data.coupleId,coupleType:data.coupleType||'couple'}:p);
+      return upd;
+    });
+    showT(`${safe(data.name)} đã check in! 🎉`);
   };
 
-  const approveSuggestion = async () => {
-    if (!proposal) return;
-    try {
-      await fetch('http://localhost:5000/api/admin/matches/approve-suggestion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: SESSION_ID,
-          team1PlayerIds: proposal.team1.map((p: any) => p.id),
-          team2PlayerIds: proposal.team2.map((p: any) => p.id),
-        })
-      });
-      setProposal(null);
-      alert('Đã tạo trận đấu!');
-    } catch (e) {
-      console.error(e);
-      alert('Có lỗi khi tạo!');
-    }
-  };
-
-  const handleQrCheckin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!qrName) return;
-    try {
-      const res = await fetch('http://localhost:5000/api/checkin/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: SESSION_ID, playerName: qrName, skillLevel: qrSkill })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setQrCheckedInMsg(`✅ ${qrName} đã check-in thành công!`);
-        setQrName('');
-        setTimeout(() => setQrCheckedInMsg(''), 4000);
+  const genQueue=()=>{
+    if(available.length<4){showT('Cần ít nhất 4 người!','warn');return;}
+    const newM:any[]=[],used=new Set<string>();
+    const cm:Record<string,any[]>={};available.forEach(p=>{if(p?.coupleId){if(!cm[p.coupleId])cm[p.coupleId]=[];cm[p.coupleId].push(p);}});
+    Object.values(cm).forEach(pair=>{
+      if(pair.length===2&&!used.has(pair[0].id)&&!used.has(pair[1].id)){
+        const others=available.filter(p=>!used.has(p.id)&&p.id!==pair[0].id&&p.id!==pair[1].id);
+        if(others.length>=2){const o1=others[rng(0,Math.min(2,others.length-1))],o2=others.filter(p=>p.id!==o1.id)[rng(0,Math.max(0,Math.min(2,others.length-2)))];
+          if(o1&&o2){const dt=pair[0].gender!==pair[1].gender&&o1.gender!==o2.gender?'mixed':'any';newM.push({team1:[pair[0],pair[1]],team2:[o1,o2],dtype:dt,coupleMatch:true});[pair[0].id,pair[1].id,o1.id,o2.id].forEach(id=>used.add(id));}}
       }
-    } catch (e) { console.error(e); }
+    });
+    for(const dt of['mixed','male','female','any']){const pool=available.filter(p=>!used.has(p.id));if(pool.length<4)break;const m=genMatch(pool,history,dt);if(m){newM.push(m);[...m.team1,...m.team2].forEach((p:any)=>used.add(p.id));}}
+    if(!newM.length){showT('Không tạo được trận!','warn');return;}
+    setQueue(p=>[...p,...newM]);showT(`Đã thêm ${newM.length} trận ⚡`);
   };
 
-  const handleKotResult = async (team1Won: boolean) => {
-    if (!kotMatchId) return alert('Nhập Match ID trước!');
-    try {
-      await fetch(`http://localhost:5000/api/admin/matches/${kotMatchId}/king-result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team1Won })
-      });
-      alert(`👑 Đã xử lý kết quả King of the Court!`);
-      setKotMatchId('');
-    } catch (e) { console.error(e); }
+  const assign=(cid:string,mdata:any)=>{
+    setCourts(p=>p.map(c=>c.id===cid?{...c,match:{...mdata},startedAt:Date.now()}:c));
+    setQueue(p=>p.filter(q=>q!==mdata));
+    showT(`Trận bắt đầu tại ${courts.find(c=>c.id===cid)?.name}! 🏓`);
+  };
+  const autoAssign=()=>{
+    const free=courts.filter(c=>!c.match);
+    if(!free.length){showT('Không có sân trống!','warn');return;}
+    if(!queue.length){showT('Queue trống!','warn');return;}
+    let q=[...queue];free.forEach(c=>{if(!q.length)return;const m=q.shift();setCourts(p=>p.map(x=>x.id===c.id?{...x,match:m,startedAt:Date.now()}:x));});
+    setQueue(q);showT('Đã gán ▶');
   };
 
-  useEffect(() => {
-    const s = io('http://localhost:5000');
-    setSocket(s);
-    s.emit('join_event', 'live');
-    
-    s.on('queue:update', (data) => setQueue(data.queueSnapshot || []));
-    s.on('court:assign', (data) => setCourts(prev => [...prev.filter(c => c.id !== data.courtId), data]));
-    s.on('court:free', (data) => setCourts(prev => prev.filter(c => c.id !== data.courtId)));
+  const handleChallenge=(cData:any)=>{setPendingChallenges(prev=>[...prev,{id:uid(),...cData,requestedAt:Date.now()}]);showT('Đã gửi thách đấu đến Host! ⏳');};
+  const handleApproveChallenge=(id:string)=>{const c=pendingChallenges.find(x=>x.id===id);if(!c)return;setQueue(prev=>[...prev,{team1:[c.challenger,c.partner],team2:[c.opp1,c.opp2],dtype:'any',custom:true,challengeMatch:true}]);setPendingChallenges(prev=>prev.filter(x=>x.id!==id));showT('Đã duyệt thách đấu! ⚔️');};
+  const handleRejectChallenge=(id:string)=>{setPendingChallenges(prev=>prev.filter(x=>x.id!==id));showT('Đã từ chối thách đấu.');};
 
-    return () => { s.disconnect(); };
-  }, []);
-
-  const simulateTraffic = () => {
-     setPlayers([
-       { id: '1', name: "Aaron Nguyen", skill: "4.0", checkedIn: true },
-       { id: '2', name: "John Doe", skill: "3.5", checkedIn: true },
-       { id: '3', name: "Sarah Smith", skill: "4.5", checkedIn: false }
-     ]);
-     setQueue([
-       { player: { name: "Aaron Nguyen", skill: "4.0" }, joinedAt: new Date(Date.now() - 500000).toISOString() },
-       { player: { name: "Mike Tyson", skill: "3.5" }, joinedAt: new Date(Date.now() - 300000).toISOString() },
-       { player: { name: "Sarah Smith", skill: "4.5" }, joinedAt: new Date(Date.now() - 100000).toISOString() }
-     ]);
-     setCourts([
-       { id: 'c1', courtId: '1', teams: [[{name: "Mike"}], [{name: "Tom"}]] },
-       { id: 'c2', courtId: '2', teams: [[{name: "Lucy"}], [{name: "Emma"}]] },
-       { id: 'c3', courtId: '3', teams: [] },
-       { id: 'c4', courtId: '4', teams: [] }
-     ]);
+  const handleScore=(w:number,sw:number,sl:number)=>{
+    if(!activeEvent){showT('Tạo Event trước khi nhập điểm!','warn');return;}
+    const court=courts.find(c=>c.id===scoreTarget);if(!court?.match)return;
+    const m=court.match;
+    const wT=(w===1?m.team1:m.team2).filter(Boolean),lT=(w===1?m.team2:m.team1).filter(Boolean);
+    if(!wT.length||!lT.length)return;
+    const delta=Math.round(28*(1-(1/(1+Math.pow(10,(teamElo(lT)-teamElo(wT))/400)))));
+    const t10=m.team1?.[0],t11=m.team1?.[1],t20=m.team2?.[0],t21=m.team2?.[1];
+    const np:Record<string,string>={};if(t10&&t11){np[t10.id]=t11.id;np[t11.id]=t10.id;}if(t20&&t21){np[t20.id]=t21.id;np[t21.id]=t20.id;}
+    setPlayers(p=>p.map((x:any)=>{
+      const isW=wT.some((v:any)=>v.id===x.id),isL=lT.some((v:any)=>v.id===x.id);
+      if(!isW&&!isL)return x;
+      const lp=np[x.id]?[np[x.id],...(x.lastPartners||[])].slice(0,4):x.lastPartners||[];
+      return{...x,elo:x.elo+(isW?delta:-delta),gamesPlayed:(x.gamesPlayed||0)+1,wins:(x.wins||0)+(isW?1:0),lastPartners:lp};
+    }));
+    setHistory(p=>[{id:uid(),eventId:activeEventId,courtId:scoreTarget,dtype:m.dtype,team1:m.team1.filter(Boolean),team2:m.team2.filter(Boolean),winner:w,scoreWinner:sw,scoreLoser:sl,score:`${w===1?sw:sl}-${w===1?sl:sw}`,eloDelta:delta,time:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})},...p]);
+    setCourts(p=>p.map(c=>c.id===scoreTarget?{...c,match:null,startedAt:null}:c));
+    setScoreTarget(null);
+    showT(`${wT.filter(Boolean).map((p:any)=>safe(p.name).split(' ').pop()).join(' & ')} thắng ${sw}-${sl}! ±${delta} ELO`);
   };
+
+  // ─ AI Matchmaker (calls backend API)
+  const fetchSuggestion=async()=>{
+    try{const res=await fetch(`http://localhost:5000/api/admin/matches/suggest/${SESSION_ID}`);const data=await res.json();if(data.proposal)setProposal(data.proposal);else showT('Không đủ người để xếp trận!','warn');}
+    catch{showT('Không kết nối được backend AI','error');}
+  };
+  const approveSuggestion=async()=>{
+    if(!proposal)return;
+    try{await fetch('http://localhost:5000/api/admin/matches/approve-suggestion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SESSION_ID,team1PlayerIds:proposal.team1.map((p:any)=>p.id),team2PlayerIds:proposal.team2.map((p:any)=>p.id)})});setProposal(null);showT('Đã tạo trận đấu từ AI! 🧠');}
+    catch{showT('Lỗi khi tạo trận','error');}
+  };
+
+  const scoreMatch=scoreTarget?courts.find(c=>c.id===scoreTarget)?.match:null;
+
+  if(!me) return <Login accounts={accounts} players={players} onLogin={setMe} loading={loading}/>;
+
+  // ─ Viewer mode
+  if(me.role===ROLES.VIEWER) {
+    const myPlayer=players.find((p:any)=>p.id===me?.id)||me;
+    const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a:any,b:any)=>b.k-a.k);
+    const [vtab,setVtab]=React.useState('courts');
+    const [showChal,setShowChal]=React.useState(false);
+    const VTABS=[{id:'courts',l:'🏟️ Sân Live'},{id:'leaderboard',l:'🏆 Xếp hạng'},{id:'queue',l:'⚔️ Queue'},{id:'events',l:'📅 Sự kiện'},{id:'history',l:'📋 Lịch sử'},{id:'analytics',l:'📈 Thống kê'}];
+    return <div style={{minHeight:'100vh',background:G.bg,color:G.text,fontFamily:'Inter,system-ui,sans-serif'}}>
+      {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+      <header style={{height:50,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px',background:G.panel,borderBottom:`1px solid ${G.border}`,position:'sticky',top:0,zIndex:200}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${G.purple},${G.pink})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>👤</div>
+          <div><div style={{fontWeight:900,fontSize:14,color:'#fff'}}>{safe(myPlayer?.name)||'Khán giả'}</div><div style={{fontSize:9,color:G.gold,fontWeight:800}}>ELO: {myPlayer?.elo||0}</div></div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
+          <Chip label={`🔴 ${courts.filter(c=>c.match).length}`} color={G.red}/>
+          <button onClick={()=>setMe(null)} style={bS}>← Thoát</button>
+        </div>
+      </header>
+      <nav style={{display:'flex',gap:2,padding:'4px 12px',background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:'auto'}}>
+        {VTABS.map(t=><button key={t.id} type="button" onClick={()=>setVtab(t.id)} style={{padding:'5px 12px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap',background:vtab===t.id?G.gold+'22':'transparent',color:vtab===t.id?G.gold:G.muted,borderBottom:vtab===t.id?`2px solid ${G.gold}`:'2px solid transparent'}}>{t.l}</button>)}
+      </nav>
+      <main style={{padding:'12px 14px',maxWidth:1400,margin:'0 auto'}}>
+        {vtab==='courts'&&<div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10,marginBottom:16}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={[]} readOnly/>)}</div></div>}
+        {vtab==='leaderboard'&&<LeaderView ranked={ranked} onShowProfile={setProfileTarget}/>}
+        {vtab==='queue'&&<div>
+          {showChal&&<ViewerChallengeModal me={myPlayer} players={players} onChallenge={handleChallenge} onClose={()=>setShowChal(false)}/>}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚔️ Queue</div>
+            {!me.id?.startsWith('v_')&&me.checkedIn&&<button onClick={()=>setShowChal(true)} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:11,padding:'6px 12px'}}>⚔️ Thách đấu</button>}
+          </div>
+          {!queue.length?<div style={{color:G.dim,fontSize:12,textAlign:'center',padding:'40px 0'}}>Chưa có trận</div>:
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>{queue.map((q:any,i:number)=><div key={i} style={{padding:'6px 10px',borderRadius:8,background:G.card,border:`1px solid ${G.border}`,display:'flex',gap:8,alignItems:'center'}}><span style={{fontSize:10,color:G.muted}}>#{i+1}</span><span style={{fontSize:10,color:G.accent}}>{(q.team1||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')}</span><span style={{fontSize:10,color:G.dim}}>vs</span><span style={{fontSize:10,color:G.gold}}>{(q.team2||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')}</span></div>)}</div>}
+        </div>}
+        {vtab==='events'&&<div><div style={{fontSize:14,fontWeight:800,color:G.text,marginBottom:12}}>📅 Sự kiện</div>{events.length===0?<div style={{color:G.dim,fontSize:12,textAlign:'center',padding:'40px 0'}}>Chưa có sự kiện nào</div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>{events.map(ev=><div key={ev.id} style={{background:G.panel,border:`1px solid ${ev.id===activeEventId?G.accent+'aa':G.border}`,borderRadius:12,padding:14}}><div style={{fontSize:14,fontWeight:800,color:G.text}}>{ev.name}</div><div style={{fontSize:11,color:G.muted,marginTop:4}}>📍 {ev.location||'Chưa có địa điểm'} · 🗓️ {ev.date}</div>{ev.id===activeEventId&&<Chip label="🔴 ĐANG DIỄN RA" color={G.red}/>}</div>)}</div>}</div>}
+        {vtab==='history'&&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} readOnly/>}
+        {vtab==='analytics'&&<AnalyticsView players={players} history={history} courts={courts}/>}
+        {profileTarget&&<PlayerProfileModal p={players.find((x:any)=>x.id===profileTarget)} history={history} onClose={()=>setProfileTarget(null)} isSA={false} onUpdatePlayer={()=>{}} toast={showT}/>}
+      </main>
+    </div>;
+  }
 
   return (
-    <div style={{ background: Theme.colors.bg, color: Theme.colors.text.primary, minHeight: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif' }}>
-      <aside style={{ width: '260px', background: Theme.colors.panel, borderRight: `1px solid ${Theme.colors.border}`, padding: '24px', display: 'flex', flexDirection: 'column' }}>
-        <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 900, background: Theme.colors.accent.gradient, WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: '40px' }}>
-          TỔNG ĐÀI QUẢN TRỊ
-        </h1>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {[
-            { id: 'live', label: 'Giám sát Trực tiếp', icon: '⚡' },
-            { id: 'players', label: 'Quản lý Người chơi', icon: '👥' },
-            { id: 'matchmaker', label: 'AI Đề xuất Trận', icon: '🧠' },
-            { id: 'kingcourt', label: 'King of the Court', icon: '👑' },
-            { id: 'checkin', label: 'QR Check-in', icon: '📷' },
-            { id: 'tvmode', label: 'TV Mode (Màn Hình Lớn)', icon: '📺' },
-            { id: 'disputes', label: 'Giải quyết Khiếu nại', icon: '⚖️' },
-            { id: 'settings', label: 'Cài đặt Hệ thống', icon: '⚙️' }
-          ].map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              style={{ 
-                textAlign: 'left', border: 'none', cursor: 'pointer', fontSize: '14px',
-                color: activeTab === t.id ? Theme.colors.accent.cyan : Theme.colors.text.muted, 
-                fontWeight: activeTab === t.id ? 800 : 600, 
-                padding: '12px 16px', background: activeTab === t.id ? `${Theme.colors.accent.cyan}15` : 'transparent', 
-                borderRadius: Theme.radii.md, transition: 'all 0.2s'
-              }}>
-              <span style={{marginRight: 8}}>{t.icon}</span> {t.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+    <div style={{minHeight:'100vh',background:G.bg,color:G.text,fontFamily:'Inter,system-ui,sans-serif'}}>
+      {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
 
-      <main style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '28px', fontWeight: 800 }}>
-            {activeTab === 'live' && 'Giám sát Trực tiếp'}
-            {activeTab === 'players' && 'Danh sách Người chơi'}
-            {activeTab === 'matchmaker' && 'AI Đề xuất Trận thông minh'}
-            {activeTab === 'kingcourt' && '👑 King of the Court'}
-            {activeTab === 'checkin' && '📷 QR Check-in Nhanh'}
-            {activeTab === 'tvmode' && 'Chế độ TV (Khán giả)'}
-            {activeTab === 'disputes' && 'Giải quyết Khiếu nại kết quả'}
-            {activeTab === 'settings' && 'Cài đặt Hệ thống'}
-          </h2>
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <button onClick={simulateTraffic} style={{ background: Theme.colors.accent.gradient, color: '#000', border: 'none', padding: '10px 20px', borderRadius: Theme.radii.md, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
-              🧪 Chạy Giả lập Dữ liệu
-            </button>
-            <div style={{ background: Theme.colors.card, padding: '12px 24px', borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.border}`, display: 'flex', alignItems: 'center' }}>
-              <span style={{ color: Theme.colors.text.muted, fontSize: '12px', marginRight: '12px', fontWeight: 700, letterSpacing: 1 }}>ĐANG ĐỢI</span>
-              <strong style={{ fontSize: '20px', color: Theme.colors.accent.neonGreen }}>{queue.length}</strong>
+      {/* MODALS */}
+      {modal==='qr'       &&<QRModal players={players} onRegister={handleRegister} onClose={()=>setModal(null)}/>}
+      {modal==='custom'   &&<CustomModal players={players} onAdd={m=>{setQueue(p=>[...p,{...m,custom:true}]);setModal(null);showT('Custom ✏️');}} onClose={()=>setModal(null)}/>}
+      {modal==='couple'   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
+      {modal==='admin'    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT}/>}
+      {modal==='newEvent' &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
+      {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
+      {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
+      {profileTarget&&<PlayerProfileModal p={players.find((x:any)=>x.id===profileTarget)} history={history} onClose={()=>setProfileTarget(null)} isSA={isSA} onUpdatePlayer={(px:any)=>setPlayers(prev=>prev.map((x:any)=>x.id===px.id?px:x))} toast={showT}/>}
+
+      {/* HEADER */}
+      <header style={{height:54,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px',background:G.panel,borderBottom:`1px solid ${G.border}`,position:'sticky',top:0,zIndex:200}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>🏓</div>
+          <div>
+            <div style={{fontWeight:900,fontSize:12,letterSpacing:2,color:'#fff',lineHeight:1,display:'flex',alignItems:'center',gap:6}}>
+              PICKLEBALL OS <span title={saving?'Đang lưu...':'Đã lưu'} style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:saving?'#f59e0b':'#00c9a7',boxShadow:saving?'0 0 6px #f59e0b88':'0 0 6px #00c9a744'}}/>
             </div>
+            <div style={{fontSize:8,color:G.muted,letterSpacing:1}}>{safe(me.name).toUpperCase()} · {activeEvent?activeEvent.name:'Chưa có event'}</div>
           </div>
         </div>
-
-        {activeTab === 'live' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '24px' }}>
-            <section>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 800, letterSpacing: 1, color: Theme.colors.text.muted, margin: 0 }}>SÂN ĐANG ĐÁNH</h3>
-                <button style={{background: 'transparent', border:`1px solid ${Theme.colors.accent.cyan}`, color: Theme.colors.accent.cyan, padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'}}>🎲 Tạo ghép trận</button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                {courts.length === 0 ? <div style={{ color: Theme.colors.text.dim, background: Theme.colors.panel, padding: 30, borderRadius: Theme.radii.xl, textAlign: 'center', gridColumn: 'span 2', border: `1px dashed ${Theme.colors.border}` }}>Không có sân nào đang đánh. Hãy ấn Chạy Giả lập.</div> : null}
-                {courts.map(court => (
-                  <div key={court.id} style={{ background: Theme.colors.card, border: `1px solid ${Theme.colors.border}`, borderRadius: Theme.radii.xl, padding: '20px', boxShadow: Theme.shadows.card }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 18 }}>Sân {court.courtId}</strong>
-                      {court.teams.length > 0 ? (
-                        <span style={{ fontSize: '11px', fontWeight: 900, background: `${Theme.colors.accent.neonGreen}15`, color: Theme.colors.accent.neonGreen, border: `1px solid ${Theme.colors.accent.neonGreen}55`, padding: '4px 8px', borderRadius: Theme.radii.full, letterSpacing: 1 }}>TRỰC TIẾP</span>
-                      ) : (
-                        <span style={{ fontSize: '11px', fontWeight: 900, background: `${Theme.colors.text.muted}15`, color: Theme.colors.text.muted, border: `1px solid ${Theme.colors.text.muted}55`, padding: '4px 8px', borderRadius: Theme.radii.full, letterSpacing: 1 }}>TRỐNG</span>
-                      )}
-                    </div>
-                    {court.teams.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ background: `${Theme.colors.accent.cyan}10`, padding: '12px', borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.accent.cyan}30`, fontWeight: 700, display: 'flex', justifyContent:'space-between', color: Theme.colors.accent.cyan }}>
-                          <span>{(court.teams[0]||[]).map((p:any)=>p.name).join(' & ')}</span>
-                          <span>0</span>
-                        </div>
-                        <div style={{ textAlign: 'center', fontSize: '11px', fontWeight: 900, color: Theme.colors.text.muted }}>VS</div>
-                        <div style={{ background: `${Theme.colors.status.warning}10`, padding: '12px', borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.status.warning}30`, fontWeight: 700, display: 'flex', justifyContent:'space-between', color: Theme.colors.status.warning }}>
-                          <span>{(court.teams[1]||[]).map((p:any)=>p.name).join(' & ')}</span>
-                          <span>0</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', color: Theme.colors.text.dim, padding: '20px 0' }}>Có thể tự do gán trận</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section style={{ background: Theme.colors.panel, borderRadius: Theme.radii.xl, padding: '24px', border: `1px solid ${Theme.colors.border}`, height: 'fit-content' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 800, letterSpacing: 1, color: Theme.colors.text.muted, margin: 0 }}>HÀNG CHỜ</h3>
-                <span style={{ fontSize: 12, color: Theme.colors.accent.cyan }}>{queue.length} Lượt đợi</span>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {queue.map((q, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: Theme.colors.card, borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.border}` }}>
-                    <div style={{ color: Theme.colors.text.muted, fontWeight: 900, fontSize: 12 }}>#{i+1}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{q.player.name}</div>
-                      <div style={{ fontSize: 11, color: Theme.colors.accent.gold }}>Trình độ: {q.player.skill}</div>
-                    </div>
-                    <div style={{ color: Theme.colors.status.warning, fontSize: '12px', fontWeight: 800, background: `${Theme.colors.status.warning}15`, padding: '4px 8px', borderRadius: 6 }}>
-                      {Math.floor((Date.now() - new Date(q.joinedAt).getTime())/60000)}p chờ
-                    </div>
-                  </div>
-                ))}
-                {queue.length === 0 && <div style={{ color: Theme.colors.text.dim, textAlign: 'center', padding: 20 }}>Hàng chờ trống.</div>}
-              </div>
-              <button style={{marginTop: 16, width: '100%', background: 'transparent', border: `1px dashed ${Theme.colors.accent.cyan}`, color: Theme.colors.accent.cyan, padding: '10px', borderRadius: Theme.radii.md, cursor: 'pointer', fontWeight: 700}}>+ Mời Tham gia (Check-in)</button>
-            </section>
-          </div>
-        )}
-
-        {activeTab === 'players' && (
-          <div style={{ background: Theme.colors.card, borderRadius: Theme.radii.xl, border: `1px solid ${Theme.colors.border}`, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) 100px 100px 100px', padding: '12px 20px', background: Theme.colors.panel, fontSize: 13, fontWeight: 700, color: Theme.colors.text.muted, borderBottom: `1px solid ${Theme.colors.border}` }}>
-              <div>NGƯỜI CHƠI</div>
-              <div>TRÌNH ĐỘ</div>
-              <div>TRẠNG THÁI</div>
-              <div>THAO TÁC</div>
+        <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+          <Chip label={`✅ ${players.filter(p=>p?.checkedIn).length}`} color={G.accent}/>
+          <Chip label={`🔴 ${courts.filter(c=>c.match).length} live`} color={G.gold}/>
+          <RBadge role={me.role}/>
+          <span onClick={()=>setModal('admin')} style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:G.gold+'20',color:G.gold,border:`1px solid ${G.gold}40`,fontWeight:700,cursor:'pointer'}}>👁 {accounts?.viewerCode||'???'}</span>
+          {activeEvent
+            ?<div style={{display:'flex',gap:4,alignItems:'center',padding:'3px 9px',borderRadius:7,background:G.accent+'15',border:`1px solid ${G.accent}44`}}>
+              <span style={{fontSize:10,color:G.accent,fontWeight:700}}>🗓️ {activeEvent.name}</span>
+              <button type="button" onClick={endEvent} style={{padding:'1px 6px',borderRadius:4,border:`1px solid ${G.red}44`,background:'transparent',color:G.red,cursor:'pointer',fontSize:9,fontWeight:700}}>✕</button>
             </div>
-            {players.length === 0 ? <div style={{padding: 40, textAlign: 'center', color: Theme.colors.text.dim}}>Chưa có đăng ký nào.</div> : null}
-            {players.map(p => (
-              <div key={p.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) 100px 100px 100px', padding: '16px 20px', borderBottom: `1px solid ${Theme.colors.border}44`, alignItems: 'center' }}>
-                <div style={{ fontWeight: 800 }}>{p.name}</div>
-                <div style={{ color: Theme.colors.accent.gold, fontWeight: 700, fontSize: 13 }}>{p.skill}</div>
-                <div>{p.checkedIn ? <span style={{color: Theme.colors.accent.neonGreen, fontSize: 12, background: `${Theme.colors.accent.neonGreen}22`, padding: '4px 8px', borderRadius: 12, fontWeight: 700}}>Đã Check-in</span> : <span style={{color: Theme.colors.text.muted, fontSize: 12}}>Vắng mặt</span>}</div>
-                <div><button style={{background: 'transparent', border:`1px solid ${Theme.colors.text.muted}55`, color: Theme.colors.text.primary, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11}}>Sửa</button></div>
-              </div>
-            ))}
-          </div>
-        )}
+            :<button type="button" onClick={()=>setModal('newEvent')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:'6px 12px'}}>🗓️ Tạo Event</button>}
+          <button type="button" onClick={()=>setTvMode(true)} style={bS}>📺</button>
+          <button type="button" onClick={()=>setModal('couple')} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`}}>💑</button>
+          <button type="button" onClick={()=>setModal('qr')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.red})`,fontSize:11}}>📷 QR</button>
+          {isSA&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`}}>⚙️</button>}
+          <button type="button" onClick={()=>setMe(null)} style={bS}>← Đăng xuất</button>
+        </div>
+      </header>
 
-        {activeTab === 'matchmaker' && (
-          <div style={{ background: Theme.colors.card, padding: 40, borderRadius: Theme.radii.xl, border: `1px solid ${Theme.colors.border}`, textAlign: 'center' }}>
-            <div style={{ fontSize: 48, marginBottom: 20 }}>🧠</div>
-            <h3 style={{ fontSize: 24, marginBottom: 10 }}>Hệ thống AI Đề Xuất Trận</h3>
-            {!proposal ? (
-              <>
-                <p style={{ color: Theme.colors.text.muted, maxWidth: 500, margin: '0 auto 30px' }}>
-                  Trí thông minh nhân tạo đang giám sát hàng chờ. Khi có 4 người cùng mức ELO tạo thành một cụm tương đồng, nó sẽ tự đề xuất một trận đấu cân bằng nhất tại đây.
-                </p>
-                <button onClick={fetchSuggestion} style={{ background: Theme.colors.panel, color: Theme.colors.text.primary, border: `1px solid ${Theme.colors.border}`, padding: '12px 24px', borderRadius: Theme.radii.lg, cursor: 'pointer', fontWeight: 700 }}>
-                  Cưỡng ép Chạy Thuật Toán
-                </button>
-              </>
-            ) : (
-              <div style={{ textAlign: 'left', maxWidth: 600, margin: '0 auto', background: Theme.colors.panel, padding: 24, borderRadius: Theme.radii.lg }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <h4 style={{ margin: 0, fontSize: 18, color: Theme.colors.text.primary }}>Đề Xuất Mới (Độ Tin Cậy: {(proposal.confidenceScore * 100).toFixed(0)}%)</h4>
-                </div>
-                
-                <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-                  <div style={{ flex: 1, background: `${Theme.colors.accent.cyan}10`, padding: 16, borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.accent.cyan}30` }}>
-                    <div style={{ fontWeight: 800, color: Theme.colors.accent.cyan, marginBottom: 8 }}>TEAM 1</div>
-                    {proposal.team1.map((p: any) => <div key={p.id}>{p.name}</div>)}
-                  </div>
-                  <div style={{ flex: 1, background: `${Theme.colors.status.warning}10`, padding: 16, borderRadius: Theme.radii.md, border: `1px solid ${Theme.colors.status.warning}30` }}>
-                    <div style={{ fontWeight: 800, color: Theme.colors.status.warning, marginBottom: 8 }}>TEAM 2</div>
-                    {proposal.team2.map((p: any) => <div key={p.id}>{p.name}</div>)}
-                  </div>
-                </div>
+      {/* Event alert */}
+      {!activeEvent&&<div style={{background:`linear-gradient(90deg,${G.gold}18,${G.purple}18)`,borderBottom:`1px solid ${G.gold}44`,padding:'8px 16px',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:11,color:G.gold}}>⚠️ Chưa có event nào đang chạy.</span>
+        <button type="button" onClick={()=>setModal('newEvent')} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:11,padding:'5px 14px'}}>🗓️ Tạo Event ngay</button>
+        <span style={{fontSize:10,color:G.dim}}>Tạo event để lưu lịch sử trận đấu theo ngày</span>
+      </div>}
 
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: Theme.colors.text.muted, marginBottom: 8 }}>LÝ DO ĐỀ XUẤT:</div>
-                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: Theme.colors.text.primary }}>
-                    {proposal.reasons.map((r: string, i: number) => <li key={i} style={{marginBottom: 4}}>{r}</li>)}
-                  </ul>
-                </div>
+      {/* NAV */}
+      <nav style={{display:'flex',gap:2,padding:'4px 12px',background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:'auto'}}>
+        {TABS.map(t=>{const ac=t.id==='kiosk'?G.purple:t.id==='matchmaker'?G.blue:G.accent;const act=tab===t.id;
+          return <button key={t.id} type="button" onClick={()=>setTab(t.id)} style={{padding:'5px 12px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap',background:act?ac+'22':'transparent',color:act?ac:G.muted,borderBottom:act?`2px solid ${ac}`:'2px solid transparent'}}>{t.l}</button>;})}
+      </nav>
 
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button onClick={approveSuggestion} style={{ flex: 1, background: Theme.colors.accent.neonGreen, color: '#000', border: 'none', padding: '12px', borderRadius: Theme.radii.md, fontWeight: 800, cursor: 'pointer' }}>
-                    ✅ Phê duyệt & Gán Sân
-                  </button>
-                  <button onClick={() => setProposal(null)} style={{ flex: 1, background: 'transparent', color: Theme.colors.text.primary, border: `1px solid ${Theme.colors.border}`, padding: '12px', borderRadius: Theme.radii.md, fontWeight: 700, cursor: 'pointer' }}>
-                    ❌ Từ chối
-                  </button>
+      {/* CONTENT */}
+      <main style={{padding:'12px 14px',maxWidth:1800,margin:'0 auto'}}>
+        {tab==='dashboard'  &&<DashTab courts={courts} players={players} queue={queue} setQueue={setQueue} pendingChallenges={pendingChallenges} onApproveChallenge={handleApproveChallenge} onRejectChallenge={handleRejectChallenge} history={history} elapsed={elapsed} available={available} onScore={(id:string)=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal('custom')} onQR={()=>setModal('qr')} activeEvent={activeEvent}/>}
+        {tab==='courts'     &&<div><div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:14}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={(id:string)=>setScoreTarget(id)} onAssign={assign}/>)}</div>{queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE</div><div style={{display:'flex',flexDirection:'column',gap:5}}>{queue.slice(0,8).map((q:any,i:number)=><div key={i} style={{padding:'6px 10px',borderRadius:8,background:G.card,border:`1px solid ${G.border}`,fontSize:11,color:G.text}}>#{i+1} · {(q.team1||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')} vs {(q.team2||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')}</div>)}</div></>}</div>}
+        {tab==='players'    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={(id:string)=>{const p=players.find((p:any)=>p.id===id);if(!p)return;setPlayers((pp:any[])=>pp.map((x:any)=>x.id===id?{...x,checkedIn:!x.checkedIn,viewerCode:x.viewerCode||genCode()}:x));showT(`${safe(p.name)} ${p.checkedIn?'rời session':'check in ✅'}`);}} onAdd={()=>setModal('qr')} onCouple={()=>setModal('couple')} onQR={()=>setModal('qr')} onShowProfile={setProfileTarget}/>}
+        {tab==='queue'      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={(id:string)=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal('custom')}/>}
+        {tab==='leaderboard'&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a:any,b:any)=>b.k-a.k)} onShowProfile={setProfileTarget}/>}
+        {tab==='history'    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
+        {tab==='analytics'  &&<AnalyticsView players={players} history={history} courts={courts}/>}
+        {tab==='kiosk'      &&<KioskTab players={players} onRegister={handleRegister} queue={queue} courts={courts} history={history}/>}
+        {tab==='matchmaker' &&(
+          <div style={{background:G.card,padding:40,borderRadius:24,border:`1px solid ${G.border}`,textAlign:'center'}}>
+            <div style={{fontSize:48,marginBottom:20}}>🧠</div>
+            <h3 style={{fontSize:24,marginBottom:10}}>Hệ thống AI Đề Xuất Trận</h3>
+            {!proposal?(<>
+              <p style={{color:G.muted,maxWidth:500,margin:'0 auto 30px',fontSize:14}}>Trí thông minh nhân tạo giám sát hàng chờ, đề xuất trận đấu cân bằng khi có đủ 4 người.</p>
+              <button onClick={fetchSuggestion} style={{...bP,padding:'12px 24px',fontSize:14}}>🤖 Chạy Thuật Toán AI</button>
+            </>):(
+              <div style={{textAlign:'left',maxWidth:600,margin:'0 auto',background:G.panel,padding:24,borderRadius:16}}>
+                <div style={{fontWeight:800,fontSize:18,marginBottom:16}}>Đề Xuất Mới (Tin cậy: {(proposal.confidenceScore*100).toFixed(0)}%)</div>
+                <div style={{display:'flex',gap:16,marginBottom:24}}>
+                  <div style={{flex:1,background:G.accent+'10',padding:16,borderRadius:12,border:`1px solid ${G.accent}30`}}><div style={{fontWeight:800,color:G.accent,marginBottom:8}}>TEAM 1</div>{proposal.team1.map((p:any)=><div key={p.id}>{p.name}</div>)}</div>
+                  <div style={{flex:1,background:G.gold+'10',padding:16,borderRadius:12,border:`1px solid ${G.gold}30`}}><div style={{fontWeight:800,color:G.gold,marginBottom:8}}>TEAM 2</div>{proposal.team2.map((p:any)=><div key={p.id}>{p.name}</div>)}</div>
+                </div>
+                <div style={{marginBottom:24}}><div style={{fontSize:13,fontWeight:700,color:G.muted,marginBottom:8}}>LÝ DO:</div><ul style={{margin:0,paddingLeft:20,fontSize:14}}>{proposal.reasons?.map((r:string,i:number)=><li key={i} style={{marginBottom:4}}>{r}</li>)}</ul></div>
+                <div style={{display:'flex',gap:12}}>
+                  <button onClick={approveSuggestion} style={{...bP,flex:1,padding:'12px',fontSize:14}}>✅ Phê duyệt & Gán Sân</button>
+                  <button onClick={()=>setProposal(null)} style={{...bS,flex:1,padding:'12px',fontSize:14}}>❌ Từ chối</button>
                 </div>
               </div>
             )}
           </div>
         )}
-
-        {activeTab === 'disputes' && (
-          <div style={{ padding: 40, color: Theme.colors.text.muted, textAlign: 'center' }}>Không có khiếu nại báo cáo sai điểm nào đang chờ giải quyết.</div>
-        )}
-
-        {activeTab === 'checkin' && (
-          <div style={{ maxWidth: 500 }}>
-            <div style={{ background: Theme.colors.card, padding: 32, borderRadius: Theme.radii.xl, border: `1px solid ${Theme.colors.border}`, marginBottom: 24 }}>
-              <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 16 }}>📷</div>
-              <p style={{ color: Theme.colors.text.muted, textAlign: 'center', marginBottom: 24 }}>Nhập nhanh thông tin người chơi để check-in và xếp hàng vào đợt chờ.</p>
-              <form onSubmit={handleQrCheckin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: Theme.colors.text.muted, marginBottom: 8 }}>HỌ TÊN</label>
-                  <input value={qrName} onChange={e => setQrName(e.target.value)} placeholder="Tên người chơi..." style={{ width: '100%', boxSizing: 'border-box', padding: 14, background: Theme.colors.panel, border: `1px solid ${Theme.colors.border}`, color: '#fff', borderRadius: Theme.radii.md, fontSize: 15 }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: Theme.colors.text.muted, marginBottom: 8 }}>TRÌNH ĐỘ</label>
-                  <select value={qrSkill} onChange={e => setQrSkill(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: 14, background: Theme.colors.panel, border: `1px solid ${Theme.colors.border}`, color: '#fff', borderRadius: Theme.radii.md, fontSize: 15 }}>
-                    <option value="2.5">2.5 – Mới chơi</option>
-                    <option value="3.0">3.0 – Cơ bản</option>
-                    <option value="3.5">3.5 – Trung cấp</option>
-                    <option value="4.0">4.0 – Khá</option>
-                    <option value="4.5">4.5+ – Chuyên</option>
-                  </select>
-                </div>
-                {qrCheckedInMsg && <div style={{ color: Theme.colors.accent.neonGreen, fontWeight: 700, textAlign: 'center', padding: 12, background: `${Theme.colors.accent.neonGreen}15`, borderRadius: Theme.radii.md }}>{qrCheckedInMsg}</div>}
-                <button type="submit" disabled={!qrName} style={{ background: qrName ? Theme.colors.accent.gradient : Theme.colors.panel, color: qrName ? '#000' : Theme.colors.text.muted, border: 'none', padding: 16, borderRadius: Theme.radii.md, fontWeight: 900, fontSize: 15, cursor: qrName ? 'pointer' : 'not-allowed' }}>
-                  ✅ Check-in & Xếp Hàng
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'kingcourt' && (
-          <div style={{ maxWidth: 600 }}>
-            <div style={{ background: `${Theme.colors.accent.gold}10`, border: `2px solid ${Theme.colors.accent.gold}55`, borderRadius: Theme.radii.xl, padding: 32, marginBottom: 24 }}>
-              <h3 style={{ color: Theme.colors.accent.gold, fontSize: 20, margin: '0 0 12px' }}>👑 Luật Vua Sân</h3>
-              <ul style={{ color: Theme.colors.text.muted, paddingLeft: 20, margin: 0, lineHeight: 2 }}>
-                <li><strong>Sân 1</strong> là "Sân Vua" – ai thắng ở đây thì <strong>ở lại</strong>.</li>
-                <li>Ai thua ở Sân Vua → bị đưa xuống cuối hàng chờ.</li>
-                <li>Các sân khác hoạt động bình thường – cả 2 đội vào hàng chờ sau trận.</li>
-              </ul>
-            </div>
-
-            <div style={{ background: Theme.colors.card, border: `1px solid ${Theme.colors.border}`, borderRadius: Theme.radii.xl, padding: 32 }}>
-              <h3 style={{ margin: '0 0 20px', fontSize: 18 }}>Nhập Kết Quả Trận (Tất cả chế độ)</h3>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: Theme.colors.text.muted, marginBottom: 8 }}>MATCH ID</label>
-                <input value={kotMatchId} onChange={e => setKotMatchId(e.target.value)} placeholder="Dán Match ID từ DB..." style={{ width: '100%', boxSizing: 'border-box', padding: 14, background: Theme.colors.panel, border: `1px solid ${Theme.colors.border}`, color: '#fff', borderRadius: Theme.radii.md, fontSize: 14 }} />
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={() => handleKotResult(true)} style={{ flex: 1, background: Theme.colors.accent.cyan, color: '#000', border: 'none', padding: 16, borderRadius: Theme.radii.md, fontWeight: 900, cursor: 'pointer' }}>Team 1 Thắng 🏆</button>
-                <button onClick={() => handleKotResult(false)} style={{ flex: 1, background: Theme.colors.status.warning, color: '#000', border: 'none', padding: 16, borderRadius: Theme.radii.md, fontWeight: 900, cursor: 'pointer' }}>Team 2 Thắng 🏆</button>
-              </div>
-              <p style={{ color: Theme.colors.text.dim, fontSize: 12, marginTop: 12, textAlign: 'center' }}>Cuối trận, hàng chờ sẽ tự động cập nhật theo luật King of the Court.</p>
-            </div>
-          </div>
-        )}
-        
-        {activeTab === 'tvmode' && (
-          <div style={{ background: '#0B1220', position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9999, padding: '40px', boxSizing: 'border-box', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
-              <h1 style={{ margin: 0, fontSize: 48, fontWeight: 900, color: Theme.colors.accent.neonGreen, textTransform: 'uppercase', letterSpacing: 2 }}>PICKLEBALL LIVE TV</h1>
-              <button onClick={() => setActiveTab('live')} style={{ background: 'transparent', color: '#fff', border: `1px solid ${Theme.colors.border}`, padding: '10px 20px', borderRadius: 8, cursor: 'pointer' }}>Thoát TV Mode</button>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 40 }}>
-               <div>
-                 <h2 style={{ fontSize: 24, color: Theme.colors.text.muted, letterSpacing: 2, marginBottom: 20 }}>🔥 CÁC TRẬN ĐANG ĐÁNH</h2>
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                   {courts.filter(c => c.teams.length > 0).map((c, i) => (
-                     <div key={i} style={{ background: Theme.colors.card, border: `2px solid ${Theme.colors.border}`, borderRadius: Theme.radii.xl, padding: 30 }}>
-                        <div style={{ fontSize: 20, fontWeight: 900, color: Theme.colors.accent.cyan, marginBottom: 16 }}>SÂN {c.courtId}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>{(c.teams[0]||[]).map((p:any)=>p.name).join(' & ')}</div>
-                          <div style={{ fontSize: 24, fontWeight: 900, color: Theme.colors.text.muted }}>VS</div>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>{(c.teams[1]||[]).map((p:any)=>p.name).join(' & ')}</div>
-                        </div>
-                     </div>
-                   ))}
-                   {courts.filter(c => c.teams.length > 0).length === 0 && <div style={{ fontSize: 24, color: Theme.colors.text.dim }}>Không có trận nào đang diễn ra</div>}
-                 </div>
-               </div>
-               
-               <div>
-                 <h2 style={{ fontSize: 24, color: Theme.colors.text.muted, letterSpacing: 2, marginBottom: 20 }}>⏳ HÀNG CHỜ TIẾP THEO</h2>
-                 <div style={{ background: Theme.colors.panel, borderRadius: Theme.radii.xl, padding: 24, border: `1px solid ${Theme.colors.border}` }}>
-                   {queue.slice(0, 8).map((q, i) => (
-                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 0', borderBottom: `1px solid ${Theme.colors.border}`, fontSize: 20, fontWeight: 700 }}>
-                       <span style={{ color: Theme.colors.text.muted }}>#{i+1}</span>
-                       <span>{q.player.name}</span>
-                       <span style={{ color: Theme.colors.accent.gold }}>{q.player.skill}</span>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'settings' && (
-          <div style={{ padding: 40, color: Theme.colors.text.muted, textAlign: 'center' }}>Cấu hình sự kiện đã được đồng bộ với Database.</div>
-        )}
-
       </main>
     </div>
   );

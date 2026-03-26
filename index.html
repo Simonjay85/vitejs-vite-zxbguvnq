@@ -1607,7 +1607,7 @@ function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
       {/* Bottom ticker */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,flexShrink:0}}>
         <div style={{background:"#0D1117",borderRadius:14,padding:"10px 14px",border:"1px solid rgba(59,130,246,0.2)"}}>
-          <div style={{fontSize:10,letterSpacing:3,color:G.blue,marginBottom:6,fontWeight:800}}>⚡ QUEUE ({queue.length})</div>
+          <div style={{fontSize:10,letterSpacing:3,color:G.blue,marginBottom:6,fontWeight:800}}>⚡ Hàng chờ ({queue.length})</div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
             {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:11,color:G.text,background:"#1E2A3A",padding:"3px 8px",borderRadius:6}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} <span style={{color:G.muted}}>vs</span> {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
             {!queue.length&&<div style={{color:G.dim,fontSize:11}}>Queue trống</div>}
@@ -1635,6 +1635,40 @@ function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
 // ══════════════════════════════════════
 // VIEWER CHALLENGE MODAL
 // ══════════════════════════════════════
+
+function DisputeModal({match, onClose, onSubmit}) {
+  const [dType, setDType] = useState('score');
+  const [dNote, setDNote] = useState('');
+  const OPTS = [
+    {v:'score',  icon:'🔢', label:'Tỉ số sai / Gian lận'},
+    {v:'skill',  icon:'📊', label:'Trình độ không phù hợp'},
+    {v:'conduct',icon:'🤝', label:'Thái độ thi đấu'},
+    {v:'other',  icon:'📝', label:'Khiếu nại khác'},
+  ];
+  const opp = (match?.team2||[]).map(p=>safe(p.name).split(' ')[0]).join(' & ');
+  const score = `${match?.scoreWinner||'?'}-${match?.scoreLoser||'?'}`;
+  return <div style={{position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,0.88)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{background:G.card,borderRadius:20,padding:24,width:'100%',maxWidth:390,border:`1px solid ${G.red}44`}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <div style={{fontSize:32}}>🚩</div>
+        <div>
+          <div style={{fontSize:17,fontWeight:900,color:'#fff'}}>Gửi Khiếu Nại</div>
+          <div style={{fontSize:11,color:G.muted}}>vs {opp} — Tỉ số {score}</div>
+        </div>
+      </div>
+      <div style={{fontSize:10,fontWeight:800,color:G.muted,marginBottom:8,letterSpacing:0.8}}>LOẠI KHIẾU NẠI</div>
+      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
+        {OPTS.map(o=><button key={o.v} onClick={()=>setDType(o.v)} style={{textAlign:'left',padding:'10px 14px',borderRadius:10,border:`1px solid ${dType===o.v?G.accent:G.border}`,background:dType===o.v?G.accent+'18':'transparent',color:dType===o.v?G.accent:G.text,fontWeight:dType===o.v?800:600,cursor:'pointer',fontSize:13,transition:'all 0.15s'}}>{o.icon} {o.label}</button>)}
+      </div>
+      <div style={{fontSize:10,fontWeight:800,color:G.muted,marginBottom:6,letterSpacing:0.8}}>GHI CHÚ (tuỳ chọn)</div>
+      <textarea value={dNote} onChange={e=>setDNote(e.target.value)} placeholder='Mô tả chi tiết sự việc...' rows={3} style={{width:'100%',background:'#111720',color:G.text,border:`1px solid ${G.border}`,borderRadius:10,padding:'10px 12px',fontSize:13,resize:'none',boxSizing:'border-box',marginBottom:16,outline:'none',fontFamily:'inherit'}}/>
+      <div style={{display:'flex',gap:10}}>
+        <button onClick={()=>onSubmit(match,dType,dNote)} style={{flex:2,background:'linear-gradient(135deg,#EF4444,#B91C1C)',color:'#fff',border:'none',padding:'14px',borderRadius:12,fontWeight:900,cursor:'pointer',fontSize:14}}>🚩 Gửi Khiếu Nại</button>
+        <button onClick={onClose} style={{flex:1,background:'transparent',color:G.muted,border:`1px solid ${G.border}`,padding:'14px',borderRadius:12,fontWeight:700,cursor:'pointer'}}>Hủy</button>
+      </div>
+    </div>
+  </div>;
+}
 
 function ViewerChallengeModal({me,players,courts,onChallenge,onClose}){
   const playingIds = new Set();
@@ -1768,17 +1802,7 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,scoreConfirm
     
     {/* Challenge Modal */}
     {showChal&&<ViewerChallengeModal me={myPlayer} players={players} courts={courts} onChallenge={onChallenge} onClose={()=>setShowChal(false)}/>}
-    {disputeTarget&&<div style={{position:"fixed",inset:0,zIndex:800,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-       <div style={{background:G.card,borderRadius:20,padding:24,width:"100%",maxWidth:360,textAlign:"center"}}>
-         <div style={{fontSize:36,marginBottom:12}}>🚩</div>
-         <div style={{fontSize:18,fontWeight:900,color:"#fff",marginBottom:8}}>Báo Cáo Sai Kết Quả</div>
-         <div style={{fontSize:13,color:G.muted,marginBottom:24,lineHeight:1.5}}>Bạn chắc chắn muốn cắm cờ khiếu nại trận đấu với <strong style={{color:"#fff"}}>{disputeTarget.team2.map(p=>safe(p.name).split(" ")[0]).join(" & ")}</strong>?</div>
-         <div style={{display:"flex",gap:10}}>
-           <button onClick={()=>{onDispute(disputeTarget);setDisputeTarget(null);}} style={{flex:1,background:G.red,color:"#fff",border:"none",padding:"14px",borderRadius:12,fontWeight:800,cursor:"pointer"}}>🚩 Gửi Khiếu Nại</button>
-           <button onClick={()=>setDisputeTarget(null)} style={{flex:1,background:"transparent",color:G.muted,border:`1px solid ${G.border}`,padding:"14px",borderRadius:12,fontWeight:700,cursor:"pointer"}}>Hủy</button>
-         </div>
-       </div>
-    </div>}
+    {disputeTarget&&<DisputeModal match={disputeTarget} onClose={()=>setDisputeTarget(null)} onSubmit={(m,type,note)=>{onDispute({...m,_dType:type,_dNote:note});setDisputeTarget(null);}}/>}
     
     
 
@@ -2464,7 +2488,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
 
     {/* Queue + Actions — stack dọc trên mobile */}
     <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:12,marginBottom:10}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ QUEUE {queue.length>0&&`(${queue.length})`}</div>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ Hàng chờ {queue.length>0&&`(${queue.length})`}</div>
       {!queue.length
         ? <div style={{color:G.dim,fontSize:11,marginBottom:10}}>Queue trống</div>
         : <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
@@ -3056,6 +3080,7 @@ function App(){
   const [elapsed,  setElapsed]  = useState({});
   const [pendingChallenges, setPendingChallenges] = useState([]);
   const [scoreConfirmations, setScoreConfirmations] = useState([]);
+  const [resolveTarget, setResolveTarget] = useState(null);
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
   // Refs để saveAll luôn dùng state mới nhất — tránh stale closure
   const stateRef = useRef({});
@@ -3103,6 +3128,7 @@ function App(){
       })),
       queue: st.queue,
       pendingChallenges: st.pendingChallenges || [],
+      scoreConfirmations: st.scoreConfirmations || [],
     });
     setTimeout(()=>setSaving(false), 500);
   },[]); // không có dependency — dùng stateRef
@@ -3324,7 +3350,12 @@ function App(){
   };
 
     const handleDispute = (match) => {
+    const type = match._dType || 'other';
+    const note = match._dNote || '';
+    const disputerEntry = {id: me.id, name: me.name||me.displayName||'Người chơi', type, note};
+    
     let sc = stateRef.current.scoreConfirmations.find(sc => sc.matchId === match.id);
+    let newScList;
     if (!sc) {
       sc = {
         id: `sc_${uid()}`,
@@ -3335,24 +3366,19 @@ function App(){
         sw: match.scoreWinner,
         sl: match.scoreLoser,
         confirmedBy: [],
-        disputedBy: [me.id],
+        disputedBy: [disputerEntry],
         timestamp: Date.now()
       };
-      const newScList = [...stateRef.current.scoreConfirmations, sc];
-      setScoreConfirmations(newScList);
-      window._lastSavedAt = Date.now();
-      STORE.save({...stateRef.current, scoreConfirmations: newScList});
+      newScList = [...stateRef.current.scoreConfirmations, sc];
     } else {
-      if(!Math.abs) return; // dummy
-      if(!sc.disputedBy) sc.disputedBy = [];
-      if(!sc.disputedBy.includes(me.id)) {
-        sc.disputedBy.push(me.id);
-        const newScList = stateRef.current.scoreConfirmations.map(x=>x.id===sc.id?sc:x);
-        setScoreConfirmations(newScList);
-        window._lastSavedAt = Date.now();
-        STORE.save({...stateRef.current, scoreConfirmations: newScList});
-      }
+      const existing = sc.disputedBy || [];
+      if(existing.some(d => (d.id||d) === me.id)) return; // already disputed
+      const updSc = {...sc, disputedBy: [...existing, disputerEntry]};
+      newScList = stateRef.current.scoreConfirmations.map(x=>x.id===sc.id?updSc:x);
     }
+    setScoreConfirmations(newScList);
+    window._lastSavedAt = Date.now();
+    STORE.save({...stateRef.current, scoreConfirmations: newScList});
     showT("🚩 Đã gửi khiếu nại về BQL.");
   };
 
@@ -3361,7 +3387,37 @@ function App(){
     setScoreConfirmations(newScList);
     window._lastSavedAt = Date.now();
     STORE.save({...stateRef.current, scoreConfirmations: newScList});
-    showT("Đã xóa cảnh báo khiếu nại!");
+    showT("Đã xử lý khiếu nại!");
+    setResolveTarget(null);
+  };
+
+  const handleResolveWithUpdate = (scId, winner, newSw, newSl) => {
+    // Update the history entry for this dispute
+    const sc = stateRef.current.scoreConfirmations.find(x=>x.id===scId);
+    let newHistory = stateRef.current.history;
+    if(sc) {
+      // winner=1 means team1 (original winner) is confirmed; winner=2 means team2 replaces
+      newHistory = stateRef.current.history.map(h => {
+        if(h.id !== sc.matchId && sc.matchId) return h;
+        // Match by matching team composition when matchId not reliable
+        const t1match = sc.team1.every(p => (h.team1||[]).some(hp=>hp.id===p.id));
+        const t2match = sc.team2.every(p => (h.team2||[]).some(hp=>hp.id===p.id));
+        if(!t1match || !t2match) return h;
+        if(winner === 1) {
+          return {...h, winner:1, scoreWinner:newSw, scoreLoser:newSl, score:`${newSw}-${newSl}`, disputed:true};
+        } else {
+          // Swap teams: team2 becomes winner
+          return {...h, winner:2, team1:sc.team2, team2:sc.team1, scoreWinner:newSw, scoreLoser:newSl, score:`${newSw}-${newSl}`, disputed:true};
+        }
+      });
+      setHistory(newHistory);
+    }
+    const newScList = stateRef.current.scoreConfirmations.filter(x=>x.id!==scId);
+    setScoreConfirmations(newScList);
+    window._lastSavedAt = Date.now();
+    STORE.save({...stateRef.current, scoreConfirmations: newScList, history: newHistory.slice(0,1000)});
+    showT("✅ Đã cập nhật kết quả trận đấu!");
+    setResolveTarget(null);
   };
 
   const handleChallenge = ({challenger, partner, opp1, opp2}) => {
@@ -3676,6 +3732,94 @@ function App(){
     {editingPlayer&&(me.role!==ROLES.VIEWER)&&<EditPlayerModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT} history={history}/>}
     {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)} activeEvent={activeEvent}/>}
 
+    {/* DISPUTE RESOLVE MODAL */}
+    {/* SCORE DISPUTE ALERT */}
+    {resolveTarget&&<div style={{position:"fixed",inset:0,zIndex:800,background:"rgba(0,0,0,0.88)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      {(()=>{
+        const sc=resolveTarget;
+        const t1n=(sc.team1||[]).map(p=>safe(p.name).split(" ")[0]).join(" & ")||"Đội A";
+        const t2n=(sc.team2||[]).map(p=>safe(p.name).split(" ")[0]).join(" & ")||"Đội B";
+        const DisputeResolveInner=()=>{
+          const [selW,setSelW]=React.useState(null);
+          const [sw2,setSw2]=React.useState(sc.sw||11);
+          const [sl2,setSl2]=React.useState(sc.sl||0);
+          return <div style={{background:G.panel,border:`1px solid ${G.red}66`,borderRadius:20,padding:24,width:"100%",maxWidth:420}}>
+            <div style={{fontSize:16,fontWeight:900,color:G.red,marginBottom:4}}>⚖️ Giải quyết khiếu nại</div>
+            <div style={{fontSize:11,color:G.muted,marginBottom:16}}>{sc.courtName} · {new Date(sc.timestamp||0).toLocaleTimeString('vi-VN')} · {(sc.disputedBy||[]).length} khiếu nại</div>
+            <div style={{background:G.card,borderRadius:12,padding:"10px 14px",marginBottom:16,border:`1px solid ${G.border}`}}>
+              <div style={{fontSize:11,color:G.muted,marginBottom:6}}>KẾT QUẢ HỆ THỐNG</div>
+              <div style={{fontSize:14,fontWeight:800,color:G.gold}}>{t1n} <span style={{color:G.accent}}>thắng</span> {sc.sw}-{sc.sl} ↔ {t2n}</div>
+            </div>
+            <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:8}}>ĐỘI NÀO THỰC SỰ THẮNG?</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+              <button onClick={()=>setSelW(1)} style={{padding:"14px 8px",borderRadius:12,cursor:"pointer",fontWeight:800,fontSize:12,border:`3px solid ${selW===1?G.accent:G.border}`,background:selW===1?G.accent+"22":"transparent",color:selW===1?G.accent:G.muted,textAlign:"center"}}>
+                <div style={{fontSize:16}}>🏆</div>{t1n}<div style={{fontSize:9,marginTop:2,fontWeight:400}}>(giữ nguyên)</div>
+              </button>
+              <button onClick={()=>setSelW(2)} style={{padding:"14px 8px",borderRadius:12,cursor:"pointer",fontWeight:800,fontSize:12,border:`3px solid ${selW===2?G.gold:G.border}`,background:selW===2?G.gold+"22":"transparent",color:selW===2?G.gold:G.muted,textAlign:"center"}}>
+                <div style={{fontSize:16}}>🏆</div>{t2n}<div style={{fontSize:9,marginTop:2,fontWeight:400}}>(đổi kết quả)</div>
+              </button>
+            </div>
+            {selW&&<div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:G.muted,fontWeight:700,marginBottom:6}}>TỈ SỐ CUỐI CÙNG</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="number" min="0" max="99" value={sw2} onChange={e=>setSw2(parseInt(e.target.value)||0)} style={{...iS,width:60,textAlign:"center",fontSize:20,fontWeight:900,padding:"8px 4px"}}/>
+                <span style={{color:G.muted,fontWeight:900}}>-</span>
+                <input type="number" min="0" max="99" value={sl2} onChange={e=>setSl2(parseInt(e.target.value)||0)} style={{...iS,width:60,textAlign:"center",fontSize:20,fontWeight:900,padding:"8px 4px"}}/>
+                <span style={{fontSize:11,color:G.muted}}>{selW===1?t1n:t2n} thắng</span>
+              </div>
+            </div>}
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{if(!selW)return;handleResolveWithUpdate(sc.id,selW,sw2,sl2);}} disabled={!selW} style={{...bP,flex:2,padding:"12px 0",opacity:selW?1:.4,fontSize:12}}>✅ Xác nhận & Cập nhật</button>
+              <button onClick={()=>handleResolveSC(sc.id)} style={{...bS,flex:1,padding:"12px 0",fontSize:11}}>Bỏ qua</button>
+              <button onClick={()=>setResolveTarget(null)} style={{...bS,padding:"12px 10px",fontSize:12}}>✕</button>
+            </div>
+          </div>;
+        };
+        return <DisputeResolveInner/>;
+      })()}
+    </div>}
+    {(()=>{
+      const disputedSCs = (scoreConfirmations||[]).filter(sc => sc.disputedBy?.length > 0);
+      if(disputedSCs.length === 0) return null;
+      const DTYPE_LABEL = {score:'🔢 Tỉ số sai',skill:'📊 Trình độ',conduct:'🤝 Thái độ',other:'📝 Khác'};
+      return <div style={{background:"rgba(239,68,68,0.15)",borderBottom:`1px solid ${G.red}44`,padding:"12px 16px"}}>
+        <div style={{fontSize:12,fontWeight:900,color:G.red,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+          <span>🚨 CÓ {disputedSCs.length} KHIẾU NẠI TỪ NGƯỜI CHƠI!</span>
+          <div style={{width:8,height:8,borderRadius:"50%",background:G.red,animation:"ping 1.5s infinite"}} />
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {disputedSCs.map(sc => <div key={sc.id} style={{background:"#1A1A1A",borderRadius:12,padding:"12px 14px",border:`1px solid ${G.red}44`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:800,color:G.gold}}>{sc.courtName} — {(sc.team1||[]).map(p=>safe(p.name).split(" ")[0]).join("+")} thắng {sc.sw}-{sc.sl}</div>
+                <div style={{fontSize:10,color:G.muted,marginTop:2}}>{new Date(sc.timestamp||0).toLocaleTimeString('vi-VN')} · {(sc.disputedBy||[]).length} khiếu nại</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
+                <button onClick={()=>setResolveTarget(sc)} style={{background:`linear-gradient(135deg,${G.red},${G.purple})`,color:"#fff",border:"none",padding:"6px 10px",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:11}}>⚖️ Xem & Xử lý</button>
+                <button onClick={()=>handleResolveSC(sc.id)} style={{background:"transparent",color:G.muted,border:`1px solid ${G.border}`,padding:"6px 8px",borderRadius:8,fontWeight:600,cursor:"pointer",fontSize:10}} title="Đã xử lý, bỏ qua">✔️</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(sc.disputedBy||[]).map((d,di)=>{
+                const disputer = players.find(p=>p.id===(d.id||d));
+                const dName = d.name||disputer?.name||"N/A";
+                const dType = DTYPE_LABEL[d.type||'other']||'📝 Khác';
+                const dNote = d.note||'';
+                return <div key={di} style={{background:`${G.red}10`,borderRadius:8,padding:"8px 10px",borderLeft:`3px solid ${G.red}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:dNote?4:0}}>
+                    <PlayerAvatar name={dName} size={20}/>
+                    <span style={{fontSize:12,fontWeight:800,color:"#fff"}}>{safe(dName)}</span>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:20,background:`${G.red}22`,color:G.red,fontWeight:700}}>{dType}</span>
+                  </div>
+                  {dNote&&<div style={{fontSize:11,color:G.muted,marginLeft:28,fontStyle:"italic"}}>"  {dNote}"</div>}
+                </div>;
+              })}
+            </div>
+          </div>)}
+        </div>
+      </div>;
+    })()}
+
     {/* HEADER — compact mobile */}
     <header style={{background:"rgba(17,24,39,0.8)",backdropFilter:"blur(24px)",borderBottom:`1px solid ${G.border}`,position:"sticky",top:0,zIndex:200}}>
       {/* Row 1: Logo + event + key stats + settings */}
@@ -3722,26 +3866,6 @@ function App(){
       </div>
     </header>
 
-    {/* SCORE DISPUTE ALERT */}
-    {(()=>{
-      const disputedSCs = (scoreConfirmations||[]).filter(sc => sc.disputedBy?.length > 0);
-      if(disputedSCs.length === 0) return null;
-      return <div style={{background:"rgba(239,68,68,0.15)",borderBottom:`1px solid ${G.red}44`,padding:"12px 16px"}}>
-        <div style={{fontSize:12,fontWeight:900,color:G.red,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-          <span>🚨 CÓ KHIẾU NẠI ĐIỂM SỐ TỪ NGƯỜI CHƠI!</span>
-          <div style={{width:8,height:8,borderRadius:"50%",background:G.red,animation:"ping 1.5s infinite"}} />
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {disputedSCs.map(sc => <div key={sc.id} style={{background:"#1A1A1A",borderRadius:10,padding:10,border:`1px solid ${G.red}33`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:12,color:"#fff"}}>
-              <strong style={{color:G.gold}}>{sc.courtName}</strong>: {sc.team1.map(p=>safe(p.name).split(" ")[0]).join("+")} thắng {sc.sw}-{sc.sl}
-              <div style={{fontSize:10,color:G.red,marginTop:4}}>❌ Bị cờ khiếu nại bởi {sc.disputedBy.length} người.</div>
-            </div>
-            <button onClick={()=>onResolveSC(sc.id)} style={{background:G.red,color:"#fff",border:"none",padding:"6px 12px",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:11}}>Đã xử lý ✔️</button>
-          </div>)}
-        </div>
-      </div>;
-    })()}
 
     {/* EVENT ALERT nếu chưa có */}
     {!activeEvent&&<div style={{background:`linear-gradient(90deg,${G.gold}18,${G.purple}18)`,borderBottom:`1px solid ${G.gold}44`,padding:"8px 16px",display:"flex",alignItems:"center",gap:10}}>
