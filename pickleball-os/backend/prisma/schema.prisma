@@ -3,14 +3,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
   id        String   @id @default(uuid())
   authId    String   @unique // Firebase or Clerk ID
-  role      Role     @default(PLAYER)
+  role      String   @default("PLAYER")
   createdAt DateTime @default(now())
 
   profile   PlayerProfile?
@@ -18,17 +18,11 @@ model User {
   auditLogs AuditLog[]
 }
 
-enum Role {
-  PLAYER
-  ADMIN
-  SUPERADMIN
-}
-
 model Venue {
   id         String   @id @default(uuid())
   name       String
   location   String
-  configJson Json?    // Opening hours, default rules
+  configJson String?    // SQLite JSON represented as String
   courts     Court[]
   events     Event[]
 }
@@ -46,19 +40,13 @@ model PlayerProfile {
   id        String @id @default(uuid())
   userId    String @unique
   name      String
-  gender    Gender
+  gender    String
   bio       String?
   avatarUrl String?
   user      User   @relation(fields: [userId], references: [id])
 
   matchPlayers  MatchPlayer[]
   queueEntries  QueueEntry[]
-}
-
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
 }
 
 model RatingProfile {
@@ -75,32 +63,20 @@ model Event {
   id        String       @id @default(uuid())
   venueId   String
   name      String
-  mode      EventMode
+  mode      String
   startTime DateTime
   endTime   DateTime?
-  status    EventStatus  @default(SCHEDULED)
+  status    String  @default("SCHEDULED")
   
   venue     Venue        @relation(fields: [venueId], references: [id])
   sessions  EventSession[]
   rules     RuleConfig?
 }
 
-enum EventMode {
-  SOCIAL_MIXED
-  KING_OF_COURT
-  COMPETITIVE_LADDER
-}
-
-enum EventStatus {
-  SCHEDULED
-  ACTIVE
-  COMPLETED
-}
-
 model EventSession {
   id       String  @id @default(uuid())
   eventId  String
-  metadata Json?
+  metadata String?
   
   event    Event   @relation(fields: [eventId], references: [id])
   queues   QueueEntry[]
@@ -111,27 +87,20 @@ model EventSession {
 model QueueEntry {
   id            String       @id @default(uuid())
   sessionId     String
-  playerIds     String[]     // Array of PlayerProfile UUIDs (1 or 2 players if locked)
+  playerId      String       // Simplified for SQLite compatibility
   joinedAt      DateTime     @default(now())
-  status        QueueStatus  @default(WAITING)
+  status        String  @default("WAITING")
   priorityScore Float        @default(0) // Higher score = prioritized for next match
   
   session       EventSession @relation(fields: [sessionId], references: [id])
-  player        PlayerProfile @relation(fields: [playerIds[0]], references: [id]) 
-}
-
-enum QueueStatus {
-  WAITING
-  ASSIGNED
-  PLAYING
-  LEFT
+  player        PlayerProfile @relation(fields: [playerId], references: [id]) 
 }
 
 model Match {
   id          String      @id @default(uuid())
   sessionId   String
   courtId     String      @unique
-  status      MatchStatus @default(ONGOING)
+  status      String @default("ONGOING")
   startTime   DateTime    @default(now())
   endTime     DateTime?
   
@@ -141,27 +110,14 @@ model Match {
   scores      ScoreSubmission[]
 }
 
-enum MatchStatus {
-  ONGOING
-  COMPLETED
-  DISPUTED
-  CANCELED
-}
-
 model MatchTeam {
   id        String  @id @default(uuid())
   matchId   String
   teamIndex Int     // 1 or 2
-  result    Result?
+  result    String?
   
   match     Match         @relation(fields: [matchId], references: [id])
   players   MatchPlayer[]
-}
-
-enum Result {
-  WIN
-  LOSS
-  DRAW
 }
 
 model MatchPlayer {
@@ -180,21 +136,15 @@ model ScoreSubmission {
   submittedBy String   // User ID
   team1Score  Int
   team2Score  Int
-  status      ScoreStatus @default(PENDING)
+  status      String @default("PENDING")
   
   match       Match    @relation(fields: [matchId], references: [id])
-}
-
-enum ScoreStatus {
-  PENDING
-  APPROVED
-  DISPUTED
 }
 
 model LeaderboardSnapshot {
   id           String   @id @default(uuid())
   sessionId    String
-  rankingsJson Json     // Frozen state of leaderboard
+  rankingsJson String     // Frozen state of leaderboard
   createdAt    DateTime @default(now())
   
   session      EventSession @relation(fields: [sessionId], references: [id])
@@ -204,7 +154,7 @@ model RuleConfig {
   id             String  @id @default(uuid())
   eventId        String  @unique
   maxWaitTimeMin Int     @default(20)
-  genderRules    Json?   // e.g. {"requireMixed": true}
+  genderRules    String?   // e.g. {"requireMixed": true}
   pointLimit     Int     @default(11)
   
   event          Event   @relation(fields: [eventId], references: [id])
@@ -215,8 +165,8 @@ model AuditLog {
   userId        String?
   action        String
   targetTable   String
-  previousState Json?
-  newState      Json?
+  previousState String?
+  newState      String?
   timestamp     DateTime @default(now())
   
   user          User?    @relation(fields: [userId], references: [id])

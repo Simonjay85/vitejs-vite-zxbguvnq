@@ -13,7 +13,8 @@ export const Theme = {
       neonGreen: "#00FFA3",
       cyan: "#00E0FF",
       gradient: "linear-gradient(135deg, #00E0FF, #00FFA3)",
-      glow: "rgba(0,255,163,0.15)"
+      glow: "rgba(0,255,163,0.15)",
+      gold: "#F59E0B"
     },
     status: {
       win: "#22C55E",

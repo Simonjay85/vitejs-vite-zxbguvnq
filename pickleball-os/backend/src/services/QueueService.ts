@@ -10,10 +10,13 @@ export class QueueService {
    */
   static async joinQueue(sessionId: string, playerIds: string[]) {
     // 1. Enter Queue
-    const entry = await prisma.queueEntry.create({
-      data: { sessionId, playerIds, status: 'WAITING' },
-      include: { player: true } // Fetches the primary player data
-    });
+    let lastEntry;
+    for (const playerId of playerIds) {
+      lastEntry = await prisma.queueEntry.create({
+        data: { sessionId, playerId, status: 'WAITING' },
+        include: { player: true }
+      });
+    }
 
     // 2. Fetch entire Queue for broadcast
     const queue = await this.getActiveQueue(sessionId);
@@ -31,7 +34,7 @@ export class QueueService {
     // 5. Trigger Matchmaking Background Check
     await MatchmakingEngine.suggestNextMatch(sessionId);
 
-    return entry;
+    return lastEntry;
   }
 
   /**

@@ -8,7 +8,7 @@
     "shared"
   ],
   "scripts": {
-    "dev:player": "npm run dev --workspace=@pickleball-os/player-app",
-    "dev:admin": "npm run dev --workspace=@pickleball-os/admin-dashboard"
+    "dev:player": "npm run dev --workspace=player-app",
+    "dev:admin": "npm run dev --workspace=admin-dashboard"
   }
 }
