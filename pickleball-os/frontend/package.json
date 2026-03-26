@@ -1,0 +1,14 @@
+{
+  "name": "pickleball-os-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "player-app",
+    "admin-dashboard",
+    "shared"
+  ],
+  "scripts": {
+    "dev:player": "npm run dev --workspace=@pickleball-os/player-app",
+    "dev:admin": "npm run dev --workspace=@pickleball-os/admin-dashboard"
+  }
+}

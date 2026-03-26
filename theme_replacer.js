@@ -1,0 +1,21 @@
+const fs = require('fs');
+const files = ['index.html', 'checkin.html'];
+files.forEach(file => {
+  let content = fs.readFileSync(file, 'utf8');
+  content = content.replace(/"#111720"/g, 'G.card');
+  content = content.replace(/"#161D2B"/g, 'G.panel');
+  content = content.replace(/"#1E2A3A"/g, 'G.border');
+  content = content.replace(/"#0D1117"/g, 'G.card');
+  content = content.replace(/"#0A0F18"/g, 'G.panel');
+  content = content.replace(/"#0B0F14"/g, '"#FFFFFF"');
+  content = content.replace(/rgba\(255,255,255,0\.02\)/g, '"#F9FAFB"');
+  content = content.replace(/rgba\(255,255,255,0\.03\)/g, '"#F9FAFB"');
+  content = content.replace(/rgba\(255,255,255,0\.04\)/g, '"#F3F4F6"');
+  content = content.replace(/rgba\(255,255,255,0\.05\)/g, '"#F3F4F6"');
+  content = content.replace(/color:"#fff"/g, 'color:G.text');
+  content = content.replace(/color:"#ffffff"/g, 'color:G.text');
+  content = content.replace(/background:"transparent",color:"#00FFB2"/g, 'background:"transparent",color:G.accent');
+  content = content.replace(/color:"#00FFB2"/g, 'color:G.accent');
+  fs.writeFileSync(file, content);
+  console.log('Replaced colors in', file);
+});

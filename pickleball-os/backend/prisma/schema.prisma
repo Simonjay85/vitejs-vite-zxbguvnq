@@ -1,0 +1,223 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  authId    String   @unique // Firebase or Clerk ID
+  role      Role     @default(PLAYER)
+  createdAt DateTime @default(now())
+
+  profile   PlayerProfile?
+  rating    RatingProfile?
+  auditLogs AuditLog[]
+}
+
+enum Role {
+  PLAYER
+  ADMIN
+  SUPERADMIN
+}
+
+model Venue {
+  id         String   @id @default(uuid())
+  name       String
+  location   String
+  configJson Json?    // Opening hours, default rules
+  courts     Court[]
+  events     Event[]
+}
+
+model Court {
+  id       String  @id @default(uuid())
+  venueId  String
+  name     String
+  isActive Boolean @default(true)
+  venue    Venue   @relation(fields: [venueId], references: [id])
+  matches  Match[]
+}
+
+model PlayerProfile {
+  id        String @id @default(uuid())
+  userId    String @unique
+  name      String
+  gender    Gender
+  bio       String?
+  avatarUrl String?
+  user      User   @relation(fields: [userId], references: [id])
+
+  matchPlayers  MatchPlayer[]
+  queueEntries  QueueEntry[]
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+model RatingProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  skillLevel  String   // e.g., "3.5"
+  eloScore    Float    @default(1200.0)
+  volatility  Float    @default(50.0) // Glicko-2 style volatility
+  lastDecayAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Event {
+  id        String       @id @default(uuid())
+  venueId   String
+  name      String
+  mode      EventMode
+  startTime DateTime
+  endTime   DateTime?
+  status    EventStatus  @default(SCHEDULED)
+  
+  venue     Venue        @relation(fields: [venueId], references: [id])
+  sessions  EventSession[]
+  rules     RuleConfig?
+}
+
+enum EventMode {
+  SOCIAL_MIXED
+  KING_OF_COURT
+  COMPETITIVE_LADDER
+}
+
+enum EventStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+}
+
+model EventSession {
+  id       String  @id @default(uuid())
+  eventId  String
+  metadata Json?
+  
+  event    Event   @relation(fields: [eventId], references: [id])
+  queues   QueueEntry[]
+  matches  Match[]
+  leaderboards LeaderboardSnapshot[]
+}
+
+model QueueEntry {
+  id            String       @id @default(uuid())
+  sessionId     String
+  playerIds     String[]     // Array of PlayerProfile UUIDs (1 or 2 players if locked)
+  joinedAt      DateTime     @default(now())
+  status        QueueStatus  @default(WAITING)
+  priorityScore Float        @default(0) // Higher score = prioritized for next match
+  
+  session       EventSession @relation(fields: [sessionId], references: [id])
+  player        PlayerProfile @relation(fields: [playerIds[0]], references: [id]) 
+}
+
+enum QueueStatus {
+  WAITING
+  ASSIGNED
+  PLAYING
+  LEFT
+}
+
+model Match {
+  id          String      @id @default(uuid())
+  sessionId   String
+  courtId     String      @unique
+  status      MatchStatus @default(ONGOING)
+  startTime   DateTime    @default(now())
+  endTime     DateTime?
+  
+  session     EventSession @relation(fields: [sessionId], references: [id])
+  court       Court        @relation(fields: [courtId], references: [id])
+  teams       MatchTeam[]
+  scores      ScoreSubmission[]
+}
+
+enum MatchStatus {
+  ONGOING
+  COMPLETED
+  DISPUTED
+  CANCELED
+}
+
+model MatchTeam {
+  id        String  @id @default(uuid())
+  matchId   String
+  teamIndex Int     // 1 or 2
+  result    Result?
+  
+  match     Match         @relation(fields: [matchId], references: [id])
+  players   MatchPlayer[]
+}
+
+enum Result {
+  WIN
+  LOSS
+  DRAW
+}
+
+model MatchPlayer {
+  id               String @id @default(uuid())
+  teamId           String
+  playerId         String
+  performanceDelta Float? // ELO change after match
+  
+  team             MatchTeam      @relation(fields: [teamId], references: [id])
+  player           PlayerProfile  @relation(fields: [playerId], references: [id])
+}
+
+model ScoreSubmission {
+  id          String   @id @default(uuid())
+  matchId     String
+  submittedBy String   // User ID
+  team1Score  Int
+  team2Score  Int
+  status      ScoreStatus @default(PENDING)
+  
+  match       Match    @relation(fields: [matchId], references: [id])
+}
+
+enum ScoreStatus {
+  PENDING
+  APPROVED
+  DISPUTED
+}
+
+model LeaderboardSnapshot {
+  id           String   @id @default(uuid())
+  sessionId    String
+  rankingsJson Json     // Frozen state of leaderboard
+  createdAt    DateTime @default(now())
+  
+  session      EventSession @relation(fields: [sessionId], references: [id])
+}
+
+model RuleConfig {
+  id             String  @id @default(uuid())
+  eventId        String  @unique
+  maxWaitTimeMin Int     @default(20)
+  genderRules    Json?   // e.g. {"requireMixed": true}
+  pointLimit     Int     @default(11)
+  
+  event          Event   @relation(fields: [eventId], references: [id])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  action        String
+  targetTable   String
+  previousState Json?
+  newState      Json?
+  timestamp     DateTime @default(now())
+  
+  user          User?    @relation(fields: [userId], references: [id])
+}
