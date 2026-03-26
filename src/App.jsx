@@ -97,7 +97,7 @@ function genMatch(pool, history, dtype) {
 const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An","Nhật Hào","Khánh Duy","Gia Bảo","Tuấn Anh","Đức Huy"];
 const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu","Tú Uyên","Diễm My","Cẩm Tú","Ánh Tuyết","Ngọc Hân"];
 function buildSeed(dbPlayers){
-  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
+  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p}));
   let mi=0,fi=0;
   const mk=(g,sk,ci,dt)=>({id:uid(),name:g==="M"?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:nowStr(),viewerCode:genCode()});
   const list=[
@@ -1545,13 +1545,27 @@ export default function App(){
   };
   const endEvent = () => {
     if(!activeEvent) return;
+    let newHist = [...history];
+    const newCourts = courts.map(c => {
+      if(c.match) {
+        const m = c.match;
+        const wT=(m.team1||[]).filter(Boolean);
+        const lT=(m.team2||[]).filter(Boolean);
+        if(wT.length && lT.length){
+           newHist.unshift({id:uid(),eventId:activeEvent.id,courtId:c.id,dtype:m.dtype,team1:wT,team2:lT,winner:1,scoreWinner:11,scoreLoser:11,score:"11-11",eloDelta:0,time:nowStr()});
+        }
+        return {...c, match:null, startedAt:null};
+      }
+      return c;
+    });
+    setCourts(newCourts);
+    setHistory(newHist);
     showT(`Event "${activeEvent.name}" kết thúc. Lịch sử đã lưu 💾`);
     setActiveEventId(null);
-    setHistory([]);
     setQueue([]);
     setPendingChallenges([]);
     setPlayers(p=>p.map(x=>({...x,checkedIn:false})));
-    saveAll({activeEventId:null, history:[], queue:[], pendingChallenges:[]});
+    saveAll({activeEventId:null, queue:[], pendingChallenges:[]});
   };
 
   const handleRegister=data=>{

@@ -5,7 +5,7 @@ import {
   skillElo, genCode, teamElo
 } from '../../shared/theme';
 import { Chip, RBadge } from '../../shared/components/Badge';
-import { Toast } from '../../shared/components/Modal';
+import { Toast, MBox } from '../../shared/components/Modal';
 import { CourtCard } from '../../shared/components/CourtCard';
 import { ScoreModal } from '../../shared/components/Modal';
 import Login from './components/Login';
@@ -17,7 +17,7 @@ import { HistoryTab, KioskTab, TVMode } from './components/MoreTabs';
 const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An"];
 const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu"];
 function buildSeed(dbPlayers: any[]|null): any[] {
-  if(dbPlayers && dbPlayers.length>0) return dbPlayers.map((p:any)=>({...p,checkedIn:false}));
+  if(dbPlayers && dbPlayers.length>0) return dbPlayers.map((p:any)=>({...p}));
   let mi=0,fi=0;
   const mk=(g:string,sk:string,ci:boolean,dt:string)=>({id:uid(),name:g==='M'?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),viewerCode:genCode()});
   return [mk('M','3.5+',true,'any'),mk('M','3.5+',true,'mixed'),mk('M','3.5',true,'any'),mk('F','3.5',true,'mixed'),mk('M','3.5',true,'male'),mk('F','3.5',true,'female'),mk('M','3.5',true,'mixed'),mk('F','3.5',false,'any'),mk('M','3.5',true,'any'),mk('F','3.0',true,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'male'),mk('F','3.0',false,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'female'),mk('M','3.0',false,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'mixed'),mk('M','2.5',true,'mixed'),mk('F','2.5',true,'any'),mk('M','2.5',true,'any'),mk('F','2.5',true,'mixed'),mk('M','2.5',false,'male'),mk('F','2.5',true,'any')].map(p=>({...p,wins:Math.round((p.gamesPlayed as number)*rng(35,65)/100)}));
@@ -73,6 +73,7 @@ export default function AdminDashboard() {
   const [toast,setToast]=useState<any>(null);
   const [elapsed,setElapsed]=useState<Record<string,number>>({});
   const [profileTarget,setProfileTarget]=useState<string|null>(null);
+  const [announcement,setAnnouncement]=useState<string>("");
   // AI Matchmaker state
   const [socket,setSocket]=useState<any>(null);
   const [proposal,setProposal]=useState<any>(null);
@@ -82,7 +83,7 @@ export default function AdminDashboard() {
   useEffect(()=>{
     try{
       const saved=localStorage.getItem('pb_os_state');
-      if(saved){const s=JSON.parse(saved);if(s.players?.length)setPlayers(buildSeed(s.players));if(s.history)setHistory(s.history);if(s.accounts)setAccounts(s.accounts);if(s.events)setEvents(s.events);if(s.activeEventId)setActiveEventId(s.activeEventId);if(s.queue)setQueue(s.queue);}
+      if(saved){const s=JSON.parse(saved);if(s.players?.length)setPlayers(buildSeed(s.players));if(s.history)setHistory(s.history);if(s.accounts)setAccounts(s.accounts);if(s.events)setEvents(s.events);if(s.activeEventId)setActiveEventId(s.activeEventId);if(s.queue)setQueue(s.queue);if(s.announcement!==undefined)setAnnouncement(s.announcement);}
     }catch{}
     setLoading(false);
   },[]);
@@ -91,9 +92,9 @@ export default function AdminDashboard() {
   const saveState=useCallback(()=>{
     if(!me||me.role===ROLES.VIEWER)return;
     setSaving(true);
-    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p,checkedIn:false})),history,accounts,events,activeEventId,queue}));}catch{}
+    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p})),history,accounts,events,activeEventId,queue,announcement}));}catch{}
     setTimeout(()=>setSaving(false),400);
-  },[me,players,history,accounts,events,activeEventId,queue]);
+  },[me,players,history,accounts,events,activeEventId,queue,announcement]);
 
   useEffect(()=>{const t=setTimeout(saveState,800);return()=>clearTimeout(t);},[players,history,accounts,events,activeEventId,queue,pendingChallenges]);
 
@@ -118,7 +119,38 @@ export default function AdminDashboard() {
   // ─ Event management
   const createEvent=(ev:any)=>{const ne=[...events,ev];setEvents(ne);setActiveEventId(ev.id);setHistory([]);setQueue([]);setPendingChallenges([]);setPlayers(p=>p.map((x:any)=>({...x,checkedIn:false})));showT(`🗓️ Event "${ev.name}" đã tạo!`);};
   const editEvent=(ev:any)=>{setEvents(events.map(e=>e.id===ev.id?ev:e));showT('Event đã cập nhật ✏️');};
-  const endEvent=()=>{if(!activeEvent)return;showT(`Event "${activeEvent.name}" kết thúc 💾`);setActiveEventId(null);setHistory([]);setQueue([]);setPendingChallenges([]);setPlayers(p=>p.map((x:any)=>({...x,checkedIn:false})));};
+  const endEvent=()=>{
+    if(!activeEvent)return;
+    let newHist = [...history];
+    const newCourts = courts.map(c => {
+      if(c.match) {
+        const m = c.match;
+        const wT=(m.team1||[]).filter(Boolean);
+        const lT=(m.team2||[]).filter(Boolean);
+        if(wT.length && lT.length){
+           newHist.unshift({id:uid(),eventId:activeEvent.id,courtId:c.id,dtype:m.dtype,team1:wT,team2:lT,winner:1,scoreWinner:11,scoreLoser:11,score:"11-11",eloDelta:0,time:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})});
+        }
+        return {...c, match:null, startedAt:null};
+      }
+      return c;
+    });
+    setCourts(newCourts);
+    setHistory(newHist);
+    showT(`Event "${activeEvent.name}" kết thúc 💾`);
+    setActiveEventId(null);
+    setQueue([]);
+    setPendingChallenges([]);
+    setPlayers(p=>p.map((x:any)=>({...x,checkedIn:false})));
+  };
+
+  const exportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({players, history, accounts, events, activeEventId, queue, announcement}));
+    const dlLink = document.createElement('a');
+    dlLink.href = dataStr;
+    dlLink.download = `pickleball_data_${new Date().toISOString().split('T')[0]}.json`;
+    dlLink.click();
+    showT("📥 Đã tải Data xuống");
+  };
 
   const handleRegister=(data:any)=>{
     setPlayers(prev=>{
@@ -222,7 +254,7 @@ export default function AdminDashboard() {
       <nav style={{display:'flex',gap:2,padding:'4px 12px',background:G.panel,borderBottom:`1px solid ${G.border}`,overflowX:'auto'}}>
         {VTABS.map(t=><button key={t.id} type="button" onClick={()=>setVtab(t.id)} style={{padding:'5px 12px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap',background:vtab===t.id?G.gold+'22':'transparent',color:vtab===t.id?G.gold:G.muted,borderBottom:vtab===t.id?`2px solid ${G.gold}`:'2px solid transparent'}}>{t.l}</button>)}
       </nav>
-      <main style={{padding:'12px 14px',maxWidth:1400,margin:'0 auto'}}>
+      <main style={{padding:'12px 14px',maxWidth:'100%',margin:'0 auto'}}>
         {vtab==='courts'&&<div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10,marginBottom:16}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={[]} readOnly/>)}</div></div>}
         {vtab==='leaderboard'&&<LeaderView ranked={ranked} onShowProfile={setProfileTarget}/>}
         {vtab==='queue'&&<div>
@@ -252,6 +284,13 @@ export default function AdminDashboard() {
       {modal==='couple'   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
       {modal==='admin'    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT}/>}
       {modal==='newEvent' &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
+      {modal==='announcement' && <MBox title="📢 Đăng Thông Báo" onClose={()=>setModal(null)}>
+        <textarea value={announcement} onChange={e=>setAnnouncement(e.target.value)} placeholder="Nhập thông báo hiển thị cho tất cả người chơi..." style={{...iS, minHeight:100, marginBottom:16}}></textarea>
+        <div style={{display:'flex', gap:8}}>
+           <button type="button" onClick={()=>{try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement}));}catch{}; showT('Đã gửi thông báo 📢'); setModal(null);}} style={{...bP,flex:1}}>Gửi Banner 📢</button>
+           <button type="button" onClick={()=>{setAnnouncement(''); try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement:''}));}catch{}; showT('Đã xoá thông báo'); setModal(null);}} style={{...bS,color:G.red,border:`1px solid ${G.red}44`}}>Xoá ✕</button>
+        </div>
+      </MBox>}
       {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
       {tvMode&&<TVMode courts={courts} elapsed={elapsed} queue={queue} players={players} history={history} onClose={()=>setTvMode(false)}/>}
       {profileTarget&&<PlayerProfileModal p={players.find((x:any)=>x.id===profileTarget)} history={history} onClose={()=>setProfileTarget(null)} isSA={isSA} onUpdatePlayer={(px:any)=>setPlayers(prev=>prev.map((x:any)=>x.id===px.id?px:x))} toast={showT}/>}
@@ -282,13 +321,19 @@ export default function AdminDashboard() {
                <button type="button" onClick={endEvent} style={{...bR,padding:'1px 5px',fontSize:9,marginLeft:2}}>✕</button>
              </div>
             :<button type="button" onClick={()=>setModal('newEvent')} style={{...bP,fontSize:11}}>🗓️ Tạo Event</button>}
-          <button type="button" onClick={()=>setTvMode(true)} style={bS} title="TV Mode">📺</button>
-          <button type="button" onClick={()=>setModal('couple')} style={{...bS,color:G.pink,borderColor:'rgba(244,143,177,0.3)'}} title="Kết đôi">💑</button>
-          <button type="button" onClick={()=>setModal('qr')} style={bP}>📷 QR</button>
-          {isSA&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,color:G.gold,borderColor:'rgba(255,193,7,0.25)'}} title="Admin">⚙️</button>}
+          {isSA&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,color:G.gold,borderColor:'rgba(255,193,7,0.25)'}} title="Cài đặt Admin">⚙️</button>}
           <button type="button" onClick={()=>setMe(null)} style={bS}>← Đăng xuất</button>
         </div>
       </header>
+      <div style={{display:'flex',gap:5,padding:'8px 14px',overflowX:'auto',background:G.panel,borderBottom:`1px solid ${G.border}`}}>
+          <button type="button" onClick={()=>setTvMode(true)} style={{...bS,fontSize:11}} title="TV Mode">📺 TV</button>
+          <button type="button" onClick={()=>setModal('couple')} style={{...bS,fontSize:11,color:G.pink,borderColor:'rgba(244,143,177,0.3)'}} title="Kết đôi">💑 Cặp</button>
+          <button type="button" onClick={()=>setModal('qr')} style={{...bP,fontSize:11}}>📷 QR Check-in</button>
+          <button type="button" onClick={()=>setModal('announcement')} style={{...bS,fontSize:11,color:G.accent,borderColor:`${G.accent}44`}} title="Thông Báo">📢 TB</button>
+          <button type="button" onClick={exportData} style={{...bS,fontSize:11,color:'#3b82f6',borderColor:'#3b82f644'}} title="Xuất JSON">📥 Data</button>
+          {(isSA||me.role===ROLES.HOST)&&<button type="button" onClick={()=>setModal('admin')} style={{...bS,fontSize:11,color:G.gold,borderColor:'rgba(255,193,7,0.25)'}} title="Cài đặt">⚙️ Cài đặt</button>}
+      </div>
+      {announcement && <div style={{background:G.red, color:"#fff", padding:"8px 16px", fontWeight:800, fontSize:15, textAlign:"center"}}>📢 THÔNG BÁO: {announcement}</div>}
 
       {/* Event alert */}
       {!activeEvent&&<div className="event-alert">
@@ -311,7 +356,7 @@ export default function AdminDashboard() {
       </nav>
 
       {/* CONTENT */}
-      <main style={{padding:'12px 14px',maxWidth:1800,margin:'0 auto'}}>
+      <main style={{padding:'12px 14px',maxWidth:'100%',margin:'0 auto'}}>
         {tab==='dashboard'  &&<DashTab courts={courts} players={players} queue={queue} setQueue={setQueue} pendingChallenges={pendingChallenges} onApproveChallenge={handleApproveChallenge} onRejectChallenge={handleRejectChallenge} history={history} elapsed={elapsed} available={available} onScore={(id:string)=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal('custom')} onQR={()=>setModal('qr')} activeEvent={activeEvent}/>}
         {tab==='courts'     &&<div><div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:14}}>{courts.map(c=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={queue.slice(0,3)} onScore={(id:string)=>setScoreTarget(id)} onAssign={assign}/>)}</div>{queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE</div><div style={{display:'flex',flexDirection:'column',gap:5}}>{queue.slice(0,8).map((q:any,i:number)=><div key={i} style={{padding:'6px 10px',borderRadius:8,background:G.card,border:`1px solid ${G.border}`,fontSize:11,color:G.text}}>#{i+1} · {(q.team1||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')} vs {(q.team2||[]).filter(Boolean).map((p:any)=>safe(p.name)).join(' & ')}</div>)}</div></>}</div>}
         {tab==='players'    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={(id:string)=>{const p=players.find((p:any)=>p.id===id);if(!p)return;setPlayers((pp:any[])=>pp.map((x:any)=>x.id===id?{...x,checkedIn:!x.checkedIn,viewerCode:x.viewerCode||genCode()}:x));showT(`${safe(p.name)} ${p.checkedIn?'rời session':'check in ✅'}`);}} onAdd={()=>setModal('qr')} onCouple={()=>setModal('couple')} onQR={()=>setModal('qr')} onShowProfile={setProfileTarget}/>}

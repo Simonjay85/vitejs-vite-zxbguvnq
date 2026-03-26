@@ -366,18 +366,18 @@ const G={
   win:"#22C55E",
   lose:"#EF4444"
 };
-const iS={background:"rgba(17,24,39,0.7)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 20px",color:G.text,fontSize:15,outline:"none",width:"100%",boxSizing:"border-box",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.5)"};
-const bP={padding:"14px 26px",borderRadius:16,border:"none",background:G.grad,color:"#0B1220",fontWeight:800,cursor:"pointer",fontSize:15,letterSpacing:0.5,boxShadow:"0 8px 24px rgba(0,255,163,0.25)"};
-const bS={padding:"12px 22px",borderRadius:16,border:`1px solid ${G.border}`,background:"rgba(17,24,39,0.5)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
-const bR={padding:"8px 16px",borderRadius:10,border:`1px solid rgba(239,68,68,0.3)`,background:"rgba(239, 68, 68, 0.05)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:13};
+const iS={background:"rgba(17,24,39,0.7)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",border:`1px solid ${G.border}`,borderRadius:16,padding:"14px 20px",color:G.text,fontSize:17,outline:"none",width:"100%",boxSizing:"border-box",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.5)"};
+const bP={padding:"14px 26px",borderRadius:16,border:"none",background:G.grad,color:"#0B1220",fontWeight:800,cursor:"pointer",fontSize:17,letterSpacing:0.5,boxShadow:"0 8px 24px rgba(0,255,163,0.25)"};
+const bS={padding:"12px 22px",borderRadius:16,border:`1px solid ${G.border}`,background:"rgba(17,24,39,0.5)",color:G.text,fontWeight:700,cursor:"pointer",fontSize:16,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+const bR={padding:"8px 16px",borderRadius:10,border:`1px solid rgba(239,68,68,0.3)`,background:"rgba(239, 68, 68, 0.05)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:15};
 
 // ── ATOMS
-const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
-const GBadge=({gender})=>{const c=gender==="M"?"#60a5fa":"#f472b6";return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"20",color:c,fontWeight:700}}>{gender==="M"?"♂":"♀"}</span>;};
-const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:o.color+"20",color:o.color,fontWeight:600}}>{o.label}</span>;};
-const CBadge=({type})=><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:G.pink+"25",color:G.pink,fontWeight:700}}>{type==="spouse"?"💍":"💑"}</span>;
-const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?9:10,padding:sm?"1px 5px":"2px 8px",borderRadius:3,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:700}}>{label}</span>;};
-const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f59e0b"},[ROLES.HOST]:{l:"🎮 Host",c:"#a78bfa"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#4A5568"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:r.c+"20",color:r.c,fontWeight:700,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
+const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:12,padding:"2px 6px",borderRadius:4,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
+const GBadge=({gender})=>{const c=gender==="M"?"#60a5fa":"#f472b6";return <span style={{fontSize:12,padding:"2px 6px",borderRadius:4,background:c+"20",color:c,fontWeight:700}}>{gender==="M"?"♂":"♀"}</span>;};
+const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];return <span style={{fontSize:12,padding:"2px 6px",borderRadius:4,background:o.color+"20",color:o.color,fontWeight:600}}>{o.label}</span>;};
+const CBadge=({type})=><span style={{fontSize:12,padding:"2px 6px",borderRadius:4,background:G.pink+"25",color:G.pink,fontWeight:700}}>{type==="spouse"?"💍":"💑"}</span>;
+const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?11:12,padding:sm?"2px 6px":"3px 10px",borderRadius:4,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:700}}>{label}</span>;};
+const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f59e0b"},[ROLES.HOST]:{l:"🎮 Host",c:"#a78bfa"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#4A5568"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:12,padding:"3px 8px",borderRadius:5,background:r.c+"20",color:r.c,fontWeight:700,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
 // Nhập số × 1000 VND — gõ 200 → 200.000đ
 const fmtK = v => v ? (Number(v)*1000).toLocaleString("vi-VN")+"đ" : "";
 const parseK = v => { const n=parseFloat(String(v).replace(/[^0-9.]/g,"")); return isNaN(n)?0:Math.round(n*1000); };
@@ -1954,7 +1954,7 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,scoreConfirm
     </div>}
 
     {/* Content */}
-    <main style={{padding:"0 20px 24px",maxWidth:900,margin:"0 auto"}}>
+    <main style={{padding:"0 20px 24px",maxWidth:"100%",margin:"0 auto"}}>
       {vtab==="courts"&&<div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontSize:16,fontWeight:900,color:"#fff"}}>🏟️ Sân đấu</div>
@@ -2532,7 +2532,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     {i:"📋",l:"Hàng chờ",   v:queue.length,                                             c:"#f59e0b"},
     {i:"🏆",l:"Trận xong",v:history.filter(h=>h.eventId===activeEvent?.id).length,  c:"#22C55E"},
   ];
-  return <div style={{width:"100%",maxWidth:1200,margin:"0 auto"}}>
+  return <div style={{width:"100%",maxWidth:"100%",margin:"0 auto"}}>
     {/* Event banner */}
     {activeEvent&&<div style={{padding:"8px 12px",borderRadius:10,background:G.accent+"12",border:`1px solid ${G.accent}44`,marginBottom:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <div style={{width:8,height:8,borderRadius:"50%",background:G.red,boxShadow:`0 0 8px ${G.red}`,flexShrink:0}}/>
@@ -3188,10 +3188,11 @@ function App(){
   const [pendingChallenges, setPendingChallenges] = useState([]);
   const [scoreConfirmations, setScoreConfirmations] = useState([]);
   const [resolveTarget, setResolveTarget] = useState(null);
+  const [announcement, setAnnouncement] = useState("");
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
   // Refs để saveAll luôn dùng state mới nhất — tránh stale closure
   const stateRef = useRef({});
-  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts,pendingChallenges,scoreConfirmations};
+  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts,pendingChallenges,scoreConfirmations,announcement};
 
   // Persist me vào sessionStorage — sống qua F5, chết khi đóng tab
   const login = (user) => {
@@ -3253,10 +3254,10 @@ function App(){
     setActiveEventId(evId);
     if(typeof db.numCourts === 'number' && db.numCourts >= 2) setNumCourts(db.numCourts);
     // Decode queue placeholder: ["_empty"] = []
-    const q = Array.isArray(db.queue) ? db.queue.filter(x=>x && x !== '_empty') : [];
-    setQueue(q);
+    setQueue(Array.isArray(db.queue) && db.queue[0] !== '_empty' ? db.queue : []);
     setPendingChallenges(Array.isArray(db.pendingChallenges) ? db.pendingChallenges : []);
     setScoreConfirmations(Array.isArray(db.scoreConfirmations) ? db.scoreConfirmations : []);
+    if(db.announcement !== undefined) setAnnouncement(db.announcement);
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
         ...c,
@@ -3376,14 +3377,26 @@ function App(){
 
   const endEvent = () => {
     if(!activeEvent) return;
-    // Đánh dấu ngay để subscribe bỏ qua echo trong 5 giây
     window._lastSavedAt = Date.now();
     const newEvents = stateRef.current.events.map(e=>e.id===activeEvent.id?{...e,ended:true,endedAt:nowStr()}:e);
-    // Finalize: update totalSpent and eventCount for players who checked in
+    
+    let newHist = [...stateRef.current.history];
+    const newCourts = stateRef.current.courts.map(c => {
+      if(c.match) {
+        const m = c.match;
+        const wT=(m.team1||[]).filter(Boolean);
+        const lT=(m.team2||[]).filter(Boolean);
+        if(wT.length && lT.length){
+           newHist.unshift({id:uid(),eventId:activeEvent.id,courtId:c.id,dtype:m.dtype,team1:wT,team2:lT,winner:1,scoreWinner:11,scoreLoser:11,score:"11-11",eloDelta:0,time:nowStr()});
+        }
+        return {...c, match:null, startedAt:null};
+      }
+      return c;
+    });
+
     const total=(Number(activeEvent.courtFee)||0)+(Number(activeEvent.extraFee)||0);
     const ciCount=stateRef.current.players.filter(p=>p?.checkedIn).length||1;
     const perPerson=total>0?Math.ceil(total/ciCount):0;
-    // Giữ nguyên players với ELO/stats — reset checkedIn, cộng dồn chi phí
     const resetPlayers = serializePlayers(stateRef.current.players.map(x=>{
       if(!x?.name) return {...x,checkedIn:false};
       const addSpent=x.checkedIn&&x.paid?(x.paidAmount||perPerson):0;
@@ -3396,23 +3409,34 @@ function App(){
     setEvents(newEvents);
     setActiveEventId(null);
     setQueue([]);
+    setCourts(newCourts);
+    setHistory(newHist);
     setPlayers(resetPlayers);
     showT(`Event "${activeEvent.name}" kết thúc 💾`);
-    STORE.save({...stateRef.current, events:newEvents, activeEventId:null, queue:[], players:resetPlayers});
+    STORE.save({...stateRef.current, events:newEvents, activeEventId:null, queue:[], courts:newCourts, history:newHist, players:resetPlayers});
   };
 
   const serializePlayers=pl=>pl.map(p=>({
-    id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.baseElo||p.elo,
+    id:p.id,name:p.name,gender:p.gender,skill:p.skill,elo:p.elo,baseElo:p.elo,
     viewerCode:p.viewerCode||null,
     dtype:p.dtype,coupleId:p.coupleId||null,coupleType:p.coupleType||null,
     gamesPlayed:p.gamesPlayed||0,wins:p.wins||0,lastPartners:p.lastPartners||[],
     createdAt:p.createdAt,phone:p.phone||"",note:p.note||"",sepc:p.sepc||0,
-    checkedIn:p.checkedIn||false,paid:p.paid||false,
+    checkedIn:p.checkedIn||false, paid:p.paid||false, isNew:p.isNew||false,
     paidAmount:p.paidAmount||0,payMethod:p.payMethod||"transfer",
     totalSpent:p.totalSpent||0,monthSpent:p.monthSpent||0,eventCount:p.eventCount||0,
     membership:p.membership||null,avatarColor:p.avatarColor||null,
     avatarImg:p.avatarImg||null,pendingSkill:p.pendingSkill||null
   }));
+
+  const exportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(stateRef.current));
+    const dlLink = document.createElement('a');
+    dlLink.href = dataStr;
+    dlLink.download = `pickleball_data_${new Date().toISOString().split('T')[0]}.json`;
+    dlLink.click();
+    showT("📥 Đã tải Data xuống");
+  };
 
   const handleRegister=data=>{
     let codeStr = "";
@@ -3818,7 +3842,7 @@ function App(){
   </>;
 
   return <div style={{background:G.bg,minHeight:"100vh",padding:window.innerWidth>1000?"24px 0":"0",color:G.text,fontFamily:"'Inter',system-ui,sans-serif"}}>
-    <div style={{background:G.panel,backdropFilter:"blur(40px)",maxWidth:window.innerWidth>1000?1200:"100%",margin:"0 auto",borderRadius:window.innerWidth>1000?24:0,boxShadow:window.innerWidth>1000?"0 20px 60px rgba(0,224,255,0.08)":"none",minHeight:window.innerWidth>1000?"calc(100vh - 48px)":"100vh",position:"relative",overflow:"hidden",paddingBottom:120}}>
+    <div style={{background:G.panel,backdropFilter:"blur(40px)",maxWidth:"100%",margin:"0 auto",borderRadius:window.innerWidth>1000?24:0,boxShadow:window.innerWidth>1000?"0 20px 60px rgba(0,224,255,0.08)":"none",minHeight:window.innerWidth>1000?"calc(100vh - 48px)":"100vh",position:"relative",overflow:"hidden",paddingBottom:120}}>
     <style>{CSS}</style>
     {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
 
@@ -3956,7 +3980,7 @@ function App(){
               </div>
             : <button onClick={()=>setModal("newEvent")} style={{...bP,background:`linear-gradient(135deg,${G.gold},${G.purple})`,fontSize:9,padding:"4px 8px",flexShrink:0}}>🗓️</button>
           }
-          {isSA&&<button onClick={()=>setModal("admin")} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`,padding:"4px 7px",fontSize:12}}>⚙️</button>}
+          {(isSA || me.role===ROLES.HOST)&&<button onClick={()=>setModal("admin")} style={{...bS,color:G.gold,border:`1px solid ${G.gold}44`,padding:"4px 7px",fontSize:13}}>⚙️</button>}
         </div>
       </div>
       {/* Row 2: Quick action strip — scroll horizontal */}
@@ -3965,6 +3989,8 @@ function App(){
         <button onClick={()=>setTab("kiosk")} style={{...bP,background:`linear-gradient(135deg,${G.purple},${G.pink})`,fontSize:10,padding:"5px 11px",flexShrink:0,borderRadius:7}}>📲 Kiosk</button>
         <button onClick={()=>setModal("couple")} style={{...bS,color:G.pink,border:`1px solid ${G.pink}44`,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>💑 Cặp</button>
         <button onClick={()=>setTvMode(true)} style={{...bS,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>📺 TV</button>
+        <button onClick={()=>setModal("announcement")} style={{...bS,color:G.accent,border:`1px solid ${G.accent}44`,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>📢 TB</button>
+        <button onClick={exportData} style={{...bS,color:G.blue,border:`1px solid ${G.blue}44`,fontSize:10,padding:"5px 10px",flexShrink:0,borderRadius:7}}>📥 Data</button>
         <div style={{padding:"4px 8px",borderRadius:7,background:G.gold+"12",border:`1px solid ${G.gold}33`,fontSize:9,color:G.gold,fontWeight:700,flexShrink:0,display:"flex",alignItems:"center",cursor:"pointer"}} onClick={()=>setModal("admin")}>
           👁 {accounts?.viewerCode||"123456"}
         </div>
@@ -3973,7 +3999,7 @@ function App(){
       </div>
     </header>
 
-
+    {announcement && <div style={{background:G.red, color:"#fff", padding:"8px 16px", fontWeight:800, fontSize:15}}><marquee scrollamount="6">📢 THÔNG BÁO: {announcement}</marquee></div>}
     {/* EVENT ALERT nếu chưa có */}
     {!activeEvent&&<div style={{background:`linear-gradient(90deg,${G.gold}18,${G.purple}18)`,borderBottom:`1px solid ${G.gold}44`,padding:"8px 16px",display:"flex",alignItems:"center",gap:10}}>
       <span style={{fontSize:11,color:G.gold}}>⚠️ Chưa có event nào đang chạy.</span>
@@ -4019,7 +4045,7 @@ function App(){
     </nav>
 
     {/* MAIN CONTENT */}
-    <main className="main-pad" style={{padding:"10px 12px",maxWidth:900,margin:"0 auto"}}>
+    <main className="main-pad" style={{padding:"10px 12px",maxWidth:"100%",margin:"0 auto"}}>
       {tab==="dashboard"  &&<DashTab courts={courts} players={players} queue={queue} history={history} elapsed={elapsed} available={available} next={queue.slice(0,3)} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} onQR={()=>setModal("qr")} activeEvent={activeEvent} matchNotifs={matchNotifs} scoreConfirmations={scoreConfirmations} onResolveSC={handleResolveSC} onStartMatch={handleStartMatch} onEditEvent={()=>setModal("editEvent")}/>}
       {tab==="courts"     &&<div>
         {activeEvent?.gameMode&&activeEvent.gameMode!=="normal"&&(()=>{const gm=GAME_MODES.find(m=>m.val===activeEvent.gameMode);return <div style={{padding:"8px 14px",borderRadius:9,background:activeEvent.gameMode==="king"?G.gold+"14":G.purple+"14",border:`1px solid ${activeEvent.gameMode==="king"?G.gold:G.purple}44`,marginBottom:10,display:"flex",alignItems:"center",gap:9}}>
