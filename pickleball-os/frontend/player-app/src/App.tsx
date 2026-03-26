@@ -1,187 +1,372 @@
-import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
+import React, { useState, useEffect, useRef } from 'react';
+import { G, bP, bS, safe, genCode, fmtVND } from '../../shared/theme';
 
-export default function PlayerApp() {
-  const [socket, setSocket] = useState<any>(null);
-  const [step, setStep] = useState<'checkin' | 'queue' | 'playing'>('checkin');
-  const [playerInfo, setPlayerInfo] = useState({ name: '', skill: '3.0' });
-  const [queueStatus, setQueueStatus] = useState({ waiting: 0, estimatedMins: 0 });
-  const [matchAssigned, setMatchAssigned] = useState<any>(null);
-  const [scores, setScores] = useState({ team1: 0, team2: 0 });
+// ── Simple Firebase polling via REST (no SDK needed in player app)
+const FB_URL = (typeof window !== 'undefined' && (window as any).__FIREBASE_URL__) || 'https://your-project-default-rtdb.firebaseio.com';
+const fbGet = async (path: string) => {
+  try {
+    const r = await fetch(`${FB_URL}/${path}.json`);
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+};
 
-  useEffect(() => {
-    const s = io('http://localhost:5000');
-    setSocket(s);
-    return () => { s.disconnect(); };
-  }, []);
+const POLL_MS = 5000;
 
-  const handleCheckIn = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!playerInfo.name) return;
-    
-    socket?.emit('join_event', 'live');
-    // Simulate immediate backend queue assignment
-    setStep('queue');
-    setQueueStatus({ waiting: Math.floor(Math.random() * 10) + 1, estimatedMins: 12 });
+// ───────────────────────────────────────────
+// ViewerPaymentModal
+// ───────────────────────────────────────────
+function ViewerPaymentModal({ me, activeEvent, onSubmit, onClose }: any) {
+  const [method, setMethod] = useState<'transfer'|'cash'|'qr_auto'>('transfer');
+  const [bill, setBill] = useState<string|null>(null);
+  const [sending, setSending] = useState(false);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => setBill(ev.target?.result as string);
+    reader.readAsDataURL(f);
   };
 
-  const debugForceMatch = () => {
-    setMatchAssigned({ id: 'match_123', courtId: '3', confidenceScore: 92, teams: [[{name: playerInfo.name}, {name: "ProBot"}], [{name: "Alpha"}, {name: "Beta"}]] });
-    setStep('playing');
-  };
-
-  const submitScore = async () => {
-    if (!matchAssigned?.id) {
-       setStep('queue');
-       return;
-    }
-    try {
-      await fetch(`http://localhost:5000/api/matches/${matchAssigned.id}/score`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          team1Score: scores.team1,
-          team2Score: scores.team2,
-          submittedBy: playerInfo.name
-        })
-      });
-      setStep('queue');
-      setScores({team1: 0, team2: 0});
-      setMatchAssigned(null);
-    } catch (e) {
-      console.error(e);
-      alert('Error submitting score');
-    }
+  const submit = () => {
+    setSending(true);
+    onSubmit({ method, bill });
+    setTimeout(() => setSending(false), 600);
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      
-      {/* HEADER matching the screenshot's 'WELLCOME BACK' look */}
-      <header style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        {step !== 'checkin' ? (
-          <>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--card)', border: '2px solid var(--neon)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-              🏓
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                WELCOME BACK,
-              </div>
-              <div style={{ fontSize: 18, fontFamily: '"Bebas Neue", sans-serif', letterSpacing: 1.5, color: '#fff' }}>
-                {playerInfo.name.toUpperCase()}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ textAlign: 'center', width: '100%' }}>
-             <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', letterSpacing: 2, marginBottom: 8 }}>PICKLEBALL HUB - ACTIVE SESSION</div>
-             <h1 style={{ fontSize: '3rem', margin: 0, lineHeight: 1 }}>JOIN THE<br/><span style={{color: 'var(--neon)'}}>COURT QUEUE</span></h1>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: G.panel, borderRadius: 20, width: '100%', maxWidth: 420, padding: 24, border: `1px solid ${G.border}` }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: G.gold, marginBottom: 4 }}>💰 Thanh toán lệ phí</div>
+        {activeEvent && (
+          <div style={{ fontSize: 12, color: G.muted, marginBottom: 16 }}>
+            Event: {activeEvent.name} · {activeEvent.feePerPerson > 0 ? fmtVND(activeEvent.feePerPerson) : 'Liên hệ Host'}
           </div>
         )}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {([['transfer', '🏦 Chuyển khoản'], ['cash', '💵 Tiền mặt'], ['qr_auto', '📱 QR Momo']] as const).map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setMethod(v)} style={{
+              flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              border: `2px solid ${method === v ? G.accent : G.border}`,
+              background: method === v ? G.accent + '18' : 'transparent',
+              color: method === v ? G.accent : G.muted
+            }}>{l}</button>
+          ))}
+        </div>
+
+        {method === 'transfer' && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: G.muted, marginBottom: 8 }}>Upload ảnh biên lai chuyển khoản:</div>
+            <input type="file" accept="image/*" onChange={handleFile} style={{ fontSize: 12, color: G.text }} />
+            {bill && <img src={bill} alt="bill" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', marginTop: 8, borderRadius: 8 }} />}
+          </div>
+        )}
+
+        {method === 'cash' && (
+          <div style={{ background: G.gold + '18', borderRadius: 12, padding: 14, marginBottom: 16, fontSize: 13, color: G.gold }}>
+            💵 Vui lòng gặp trực tiếp Host để nộp tiền mặt. Host sẽ xác nhận thanh toán cho bạn.
+          </div>
+        )}
+
+        {method === 'qr_auto' && activeEvent?.qrUrl && (
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <img src={activeEvent.qrUrl} alt="QR" style={{ width: 180, height: 180, borderRadius: 12, border: `2px solid ${G.gold}` }} />
+            <div style={{ fontSize: 11, color: G.muted, marginTop: 8 }}>Quét mã để chuyển khoản</div>
+            <input type="file" accept="image/*" onChange={handleFile} style={{ fontSize: 11, color: G.text, marginTop: 8 }} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={submit} disabled={sending || (method === 'transfer' && !bill)}
+            style={{ ...bP, flex: 1, opacity: (sending || (method === 'transfer' && !bill)) ? 0.5 : 1 }}>
+            {sending ? '⏳ Đang gửi...' : 'Gửi yêu cầu 📤'}
+          </button>
+          <button type="button" onClick={onClose} style={bS}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────
+// LoginScreen
+// ───────────────────────────────────────────
+function LoginScreen({ onLogin }: { onLogin: (code: string) => void }) {
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get('code');
+    if (c && /^\d{6}$/.test(c)) onLogin(c);
+  }, []);
+
+  const tryLogin = () => {
+    if (!/^\d{6}$/.test(code)) { setErr('Mã phải là 6 chữ số'); return; }
+    onLogin(code);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: G.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'Inter,system-ui,sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 400, background: G.panel, borderRadius: 24, padding: 32, border: `1px solid ${G.border}`, boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🏓</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: 1 }}>PICKLEBALL HUB</div>
+          <div style={{ fontSize: 12, color: G.muted, marginTop: 4 }}>Đăng nhập để xem sân & theo dõi trận đấu</div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: G.muted, letterSpacing: 1, display: 'block', marginBottom: 8 }}>MÃ TRUY CẬP (6 SỐ)</label>
+          <input
+            type="tel" pattern="[0-9]*" value={code} maxLength={6}
+            onChange={e => { setCode(e.target.value.replace(/[^0-9]/g, '')); setErr(''); }}
+            onKeyDown={e => e.key === 'Enter' && tryLogin()}
+            placeholder="VD: 123456"
+            style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: `1px solid ${G.border}`, background: G.card, color: G.text, fontSize: 22, textAlign: 'center', letterSpacing: 8, outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        {err && <div style={{ color: G.red, fontSize: 12, marginBottom: 12, textAlign: 'center' }}>{err}</div>}
+
+        <button type="button" onClick={tryLogin} style={{ ...bP, width: '100%', padding: '14px', fontSize: 15, borderRadius: 12 }}>
+          Đăng nhập vào event 👁
+        </button>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: G.muted }}>
+          Mã cá nhân được giao sau khi check-in · Mã chung do Host cấp
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────
+// Main App
+// ───────────────────────────────────────────
+export default function PlayerApp() {
+  const [viewerCode, setViewerCode] = useState<string | null>(null);
+  const [dbState, setDbState] = useState<any>(null);
+  const [me, setMe] = useState<any>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  const [payDone, setPayDone] = useState(false);
+  const [vtab, setVtab] = useState('courts');
+  const pollRef = useRef<any>(null);
+
+  // Poll Firebase for updates
+  const pollDb = async () => {
+    const db = await fbGet('state');
+    if (db) setDbState(db);
+  };
+
+  useEffect(() => {
+    if (!viewerCode) return;
+    pollDb();
+    pollRef.current = setInterval(pollDb, POLL_MS);
+    return () => clearInterval(pollRef.current);
+  }, [viewerCode]);
+
+  // Resolve "me" from viewerCode once dbState loads
+  useEffect(() => {
+    if (!dbState || !viewerCode) return;
+    const players: any[] = Array.isArray(dbState.players) ? dbState.players : Object.values(dbState.players || {});
+    const found = players.find((p: any) => String(p.viewerCode) === String(viewerCode) || String(dbState.accounts?.viewerCode) === String(viewerCode));
+    if (found) setMe(found);
+    else if (String(dbState.accounts?.viewerCode) === String(viewerCode)) setMe({ id: 'v_guest', name: 'Khán giả', isGuest: true });
+  }, [dbState, viewerCode]);
+
+  if (!viewerCode) return <LoginScreen onLogin={setViewerCode} />;
+
+  if (!dbState || !me) return (
+    <div style={{ minHeight: '100vh', background: G.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, fontFamily: 'Inter,system-ui,sans-serif' }}>
+      <div style={{ fontSize: 32 }}>⏳</div>
+      <div style={{ color: G.muted, fontSize: 14 }}>Đang xác thực mã...</div>
+      <button onClick={() => setViewerCode(null)} style={{ ...bS, fontSize: 12, marginTop: 8 }}>← Quay lại</button>
+    </div>
+  );
+
+  const players: any[] = Array.isArray(dbState.players) ? dbState.players : Object.values(dbState.players || {});
+  const courts: any[] = Array.isArray(dbState.courts) ? dbState.courts : Object.values(dbState.courts || {});
+  const queue: any[] = Array.isArray(dbState.queue) ? dbState.queue : [];
+  const events: any[] = Array.isArray(dbState.events) ? dbState.events : Object.values(dbState.events || {});
+  const history: any[] = Array.isArray(dbState.history) ? dbState.history : [];
+  const announcement: string = dbState.announcement || '';
+  const activeEventId: string | null = dbState.activeEventId || null;
+  const activeEvent = events.find(e => e.id === activeEventId) || null;
+  const myPlayer = players.find(p => p.id === me.id) || me;
+
+  const liveCourts = courts.filter(c => c.match);
+  const checkedInCount = players.filter(p => p.checkedIn).length;
+
+  const perPerson = activeEvent
+    ? (activeEvent.feePerPerson > 0 ? activeEvent.feePerPerson
+      : ((Number(activeEvent.courtFee) || 0) + (Number(activeEvent.extraFee) || 0)) / (checkedInCount || 1))
+    : 0;
+
+  const VTABS = [
+    { id: 'courts', l: '🏟️ Sân Live' },
+    { id: 'queue', l: '⚔️ Queue' },
+    { id: 'event', l: '📅 Sự kiện' },
+    { id: 'leaderboard', l: '🏆 Xếp hạng' },
+  ];
+
+  const handlePaySubmit = ({ method, bill }: any) => {
+    // In a real app this would POST to Firebase paymentAlerts
+    setPayDone(true);
+    setShowPayment(false);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: G.bg, color: G.text, fontFamily: 'Inter,system-ui,sans-serif' }}>
+      {/* Announcement banner */}
+      {announcement && (
+        <div style={{ background: G.red, color: '#fff', padding: '8px 16px', fontWeight: 800, fontSize: 14 }}>
+          <marquee scrollAmount={6}>📢 THÔNG BÁO: {announcement}</marquee>
+        </div>
+      )}
+
+      {/* Header */}
+      <header style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: G.panel, borderBottom: `1px solid ${G.border}`, position: 'sticky', top: 0, zIndex: 200 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg,${G.purple},${G.accent})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
+            {me.isGuest ? '👁' : '🏓'}
+          </div>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 14, color: '#fff' }}>{safe(myPlayer?.name) || 'Khán giả'}</div>
+            <div style={{ fontSize: 9, color: G.muted }}>{activeEvent ? activeEvent.name : 'Chưa có event'}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: G.accent + '18', color: G.accent, fontWeight: 700 }}>✅ {checkedInCount}</span>
+          <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: G.red + '18', color: G.red, fontWeight: 700 }}>🔴 {liveCourts.length}</span>
+          <button onClick={() => setViewerCode(null)} style={{ ...bS, fontSize: 10, padding: '4px 10px' }}>← Thoát</button>
+        </div>
       </header>
-      
-      <main style={{ padding: '0 24px 24px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        
-        {step === 'checkin' && (
-          <form onSubmit={handleCheckIn} style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.4s ease' }}>
-            
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20, border: 'none' }}>
-              <div>
-                <label>FULL NAME</label>
-                <input type="text" value={playerInfo.name} onChange={e => setPlayerInfo({...playerInfo, name: e.target.value})} placeholder="Enter your name" autoFocus />
-              </div>
 
-              <div>
-                <label>SELF-RATED SKILL (DUPR)</label>
-                <select value={playerInfo.skill} onChange={e => setPlayerInfo({...playerInfo, skill: e.target.value})}>
-                  <option value="2.5">2.5 (Beginner)</option>
-                  <option value="3.0">3.0 (Novice)</option>
-                  <option value="3.5">3.5 (Intermediate)</option>
-                  <option value="4.0">4.0 (Advanced)</option>
-                  <option value="4.5">4.5+ (Pro)</option>
-                </select>
-              </div>
+      {/* Payment prompt */}
+      {!me.isGuest && myPlayer.checkedIn && !myPlayer.paid && !payDone && (
+        <div style={{ background: G.gold + '18', borderBottom: `1px solid ${G.gold}44`, padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: G.gold }}>⚠️ Bạn chưa hoàn tất lệ phí sân</div>
+            <div style={{ fontSize: 11, color: G.muted }}>Đang chờ Host xác nhận thanh toán...</div>
+          </div>
+          <button type="button" onClick={() => setShowPayment(true)} style={{ ...bP, background: `linear-gradient(135deg,${G.gold},${G.red})`, fontSize: 11, padding: '7px 14px' }}>
+            Thanh toán 💳
+          </button>
+        </div>
+      )}
+
+      {/* Nav */}
+      <nav style={{ display: 'flex', gap: 2, padding: '4px 12px', background: G.panel, borderBottom: `1px solid ${G.border}`, overflowX: 'auto' }}>
+        {VTABS.map(t => (
+          <button key={t.id} type="button" onClick={() => setVtab(t.id)} style={{
+            padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+            whiteSpace: 'nowrap', background: vtab === t.id ? G.gold + '22' : 'transparent',
+            color: vtab === t.id ? G.gold : G.muted, borderBottom: vtab === t.id ? `2px solid ${G.gold}` : '2px solid transparent'
+          }}>{t.l}</button>
+        ))}
+      </nav>
+
+      {/* Content */}
+      <main style={{ padding: '12px 14px' }}>
+
+        {/* Courts tab */}
+        {vtab === 'courts' && (
+          <div>
+            {!liveCourts.length && <div style={{ textAlign: 'center', color: G.muted, padding: '40px 0', fontSize: 13 }}>Hiện không có sân nào đang đấu</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {courts.map(c => (
+                <div key={c.id} style={{ background: G.card, borderRadius: 14, border: `1px solid ${c.match ? G.accent + '66' : G.border}`, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: c.match ? 10 : 0 }}>
+                    <div style={{ fontWeight: 800, color: c.match ? G.accent : G.muted, fontSize: 14 }}>{c.name}</div>
+                    <span style={{
+                      fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
+                      background: c.match ? G.accent + '22' : G.muted + '22',
+                      color: c.match ? G.accent : G.muted
+                    }}>{c.match ? '🔴 Đang đấu' : '⬜ Trống'}</span>
+                  </div>
+                  {c.match && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: G.text }}>
+                        {(c.match.team1 || []).filter(Boolean).map((p: any) => safe(p.name)).join(' & ')}
+                      </div>
+                      <div style={{ fontSize: 12, color: G.muted }}>VS</div>
+                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: G.gold, textAlign: 'right' }}>
+                        {(c.match.team2 || []).filter(Boolean).map((p: any) => safe(p.name)).join(' & ')}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-
-            <button type="submit" className="btn-primary" disabled={!playerInfo.name} style={{ width: '100%', padding: '18px 20px', fontSize: 15 }}>
-              JOIN QUEUE NOW
-            </button>
-            <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>FIRST TIME PLAYING? <span style={{color: '#fff', textDecoration: 'underline'}}>VIEW RULES</span></div>
-          </form>
-        )}
-
-        {step === 'queue' && (
-          <div style={{ animation: 'slideIn 0.4s ease' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-               <div className="stat-card">
-                  <div className="stat-card__value" style={{color: 'var(--neon)'}}>{queueStatus.waiting}</div>
-                  <div className="stat-card__label">AHEAD OF YOU</div>
-               </div>
-               <div className="stat-card">
-                  <div className="stat-card__value">{queueStatus.estimatedMins}<span style={{fontSize:16}}>m</span></div>
-                  <div className="stat-card__label">WAIT TIME</div>
-               </div>
-            </div>
-
-            <div className="card" style={{ textAlign: 'center', marginBottom: 24, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%', background: `radial-gradient(circle, rgba(212,255,0,0.1) 0%, transparent 60%)`, animation: 'pulse 3s infinite' }} />
-              <div style={{ position: 'relative', zIndex: 1 }}>
-                <h2 style={{ fontSize: '2.5rem', marginBottom: 8 }}>PREPARING<br/>YOUR MATCH</h2>
-                <p style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 500 }}>Please stay near the courts. The AI matchmaker will assign you shortly.</p>
-              </div>
-            </div>
-
-            <button onClick={debugForceMatch} className="btn-secondary" style={{ width: '100%', borderStyle: 'dashed', marginBottom: 12 }}>
-              🔧 SIMULATE MATCH (DEBUG)
-            </button>
-            <button onClick={() => setStep('checkin')} className="btn-secondary" style={{ width: '100%', color: 'var(--red)', borderColor: 'rgba(235,87,87,0.3)' }}>
-              LEAVE QUEUE
-            </button>
           </div>
         )}
 
-        {step === 'playing' && matchAssigned && (
-          <div style={{ animation: 'fadeUp 0.4s ease', display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ textAlign: 'center' }}>
-               <span className="chip chip-neon" style={{ marginBottom: 16 }}>MATCH READY</span>
-               <h1 style={{ fontSize: '4rem', margin: 0, textShadow: 'var(--glow-neon)', color: 'var(--neon)' }}>COURT {matchAssigned.courtId}</h1>
+        {/* Queue tab */}
+        {vtab === 'queue' && (
+          <div>
+            {!queue.length && <div style={{ textAlign: 'center', color: G.muted, padding: '40px 0', fontSize: 13 }}>Hàng chờ trống</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {queue.map((q: any, i: number) => (
+                <div key={i} style={{ padding: '10px 12px', borderRadius: 10, background: G.card, border: `1px solid ${G.border}`, display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+                  <span style={{ fontSize: 10, color: G.muted, fontWeight: 700, minWidth: 20 }}>#{i + 1}</span>
+                  <span style={{ color: G.accent }}>{(q.team1 || []).filter(Boolean).map((p: any) => safe(p.name)).join(' & ')}</span>
+                  <span style={{ color: G.dim }}>vs</span>
+                  <span style={{ color: G.gold }}>{(q.team2 || []).filter(Boolean).map((p: any) => safe(p.name)).join(' & ')}</span>
+                </div>
+              ))}
             </div>
-            
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 <div style={{ flex: 1 }}>
-                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', marginBottom: 8 }}>TEAM 1</div>
-                   {matchAssigned.teams[0].map((p:any,i:number) => <div key={i} style={{fontSize: 16, fontWeight: 700, fontFamily: '"Bebas Neue", sans-serif'}}>{p.name}</div>)}
-                 </div>
-                 <div style={{ fontSize: 24, fontFamily: '"Bebas Neue", sans-serif', color: 'var(--neon)', opacity: 0.5 }}>VS</div>
-                 <div style={{ flex: 1, textAlign: 'right' }}>
-                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', marginBottom: 8 }}>TEAM 2</div>
-                   {matchAssigned.teams[1].map((p:any,i:number) => <div key={i} style={{fontSize: 16, fontWeight: 700, fontFamily: '"Bebas Neue", sans-serif'}}>{p.name}</div>)}
-                 </div>
-               </div>
-            </div>
-            
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="section-label" style={{ textAlign: 'center', marginBottom: 0 }}>RECORD RESULT</div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 24 }}>
-                 <div style={{ textAlign: 'center' }}>
-                   <input type="number" value={scores.team1} onChange={e => setScores({...scores, team1: parseInt(e.target.value)||0})} 
-                     style={{ width: 80, height: 80, fontSize: '3rem', fontFamily: '"Bebas Neue", sans-serif', textAlign: 'center', padding: 0 }} />
-                 </div>
-                 <div style={{ textAlign: 'center' }}>
-                   <input type="number" value={scores.team2} onChange={e => setScores({...scores, team2: parseInt(e.target.value)||0})} 
-                     style={{ width: 80, height: 80, fontSize: '3rem', fontFamily: '"Bebas Neue", sans-serif', textAlign: 'center', padding: 0 }} />
-                 </div>
+          </div>
+        )}
+
+        {/* Event tab */}
+        {vtab === 'event' && (
+          <div>
+            {!activeEvent && <div style={{ textAlign: 'center', color: G.muted, padding: '40px 0', fontSize: 13 }}>Chưa có event nào đang chạy</div>}
+            {activeEvent && (
+              <div style={{ background: G.panel, borderRadius: 16, border: `1px solid ${G.accent}44`, padding: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginBottom: 4 }}>🗓️ {activeEvent.name}</div>
+                <div style={{ fontSize: 12, color: G.muted, marginBottom: 16 }}>📍 {activeEvent.location || 'Chưa có địa điểm'} · {activeEvent.date}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { l: '👥 Số người', v: `${checkedInCount} người` },
+                    { l: '💰 Phí/người', v: perPerson > 0 ? fmtVND(Math.ceil(perPerson)) : 'Chưa tính' },
+                    { l: '🏟️ Giá sân', v: activeEvent.courtFee ? fmtVND(Number(activeEvent.courtFee)) : 'Chưa có' },
+                    { l: '🧾 Chi phí khác', v: activeEvent.extraFee ? fmtVND(Number(activeEvent.extraFee)) : '—' },
+                  ].map(s => (
+                    <div key={s.l} style={{ padding: '10px 12px', borderRadius: 10, background: G.card, border: `1px solid ${G.border}` }}>
+                      <div style={{ fontSize: 9, color: G.muted, marginBottom: 3 }}>{s.l}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: G.text }}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            
-            <button onClick={submitScore} className="btn-primary" style={{ width: '100%', padding: '20px', fontSize: 18 }}>
-              SUBMIT SCORE
-            </button>
+            )}
+          </div>
+        )}
+
+        {/* Leaderboard tab */}
+        {vtab === 'leaderboard' && (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: G.text, marginBottom: 12 }}>🏆 Xếp hạng hôm nay</div>
+            {players.filter(p => p.name).sort((a, b) => (b.elo || 0) - (a.elo || 0)).slice(0, 20).map((p: any, i: number) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: G.card, border: `1px solid ${G.border}`, marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: i < 3 ? G.gold : G.muted, minWidth: 20 }}>#{i + 1}</div>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: G.text }}>{safe(p.name)}</div>
+                <div style={{ fontSize: 12, color: G.accent, fontWeight: 700 }}>{p.elo || 0} ELO</div>
+              </div>
+            ))}
           </div>
         )}
       </main>
+
+      {/* Payment modal */}
+      {showPayment && (
+        <ViewerPaymentModal
+          me={myPlayer}
+          activeEvent={activeEvent}
+          onSubmit={handlePaySubmit}
+          onClose={() => setShowPayment(false)}
+        />
+      )}
     </div>
   );
 }

@@ -86,6 +86,12 @@ export const validScore = (a: number, b: number): boolean => {
   return l<10 ? w===11 : w-l===2;
 };
 export const getWinner = (a: number, b: number): number|null => validScore(a,b) ? (a>b?1:2) : null;
+export const fmtVND = (n: number): string => (n||0).toLocaleString("vi-VN") + "đ";
+export const serializePlayers = (players: any[]): any[] => players.map(p => ({
+  ...p,
+  viewerCode: p.viewerCode || null,
+  paymentInfo: p.paymentInfo || null,
+}));
 
 export function sepc(player: any, history: any[]): number {
   if(!player||!history) return 0;

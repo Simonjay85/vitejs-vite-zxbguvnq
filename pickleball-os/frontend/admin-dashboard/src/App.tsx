@@ -93,7 +93,10 @@ export default function AdminDashboard() {
   const saveState=useCallback(()=>{
     if(!me||me.role===ROLES.VIEWER)return;
     setSaving(true);
-    try{localStorage.setItem('pb_os_state',JSON.stringify({players:players.map(p=>({...p})),history,accounts,events,activeEventId,queue,announcement,paymentAlerts}));}catch{}
+    try{localStorage.setItem('pb_os_state',JSON.stringify({
+      players:players.map(p=>({...p, viewerCode:p.viewerCode||null, paymentInfo:p.paymentInfo||null})),
+      history,accounts,events,activeEventId,queue,announcement,paymentAlerts
+    }));}catch{}
     setTimeout(()=>setSaving(false),400);
   },[me,players,history,accounts,events,activeEventId,queue,announcement,paymentAlerts]);
 
@@ -295,11 +298,16 @@ export default function AdminDashboard() {
       {modal==='couple'   &&<CoupleModal players={players} setPlayers={setPlayers} onClose={()=>setModal(null)}/>}
       {modal==='admin'    &&<AdminModal accounts={accounts} setAccounts={setAccounts} me={me} onClose={()=>setModal(null)} toast={showT}/>}
       {modal==='newEvent' &&<EventModal isNew onSave={createEvent} onClose={()=>setModal(null)}/>}
-      {modal==='announcement' && <MBox title="📢 Đăng Thông Báo" onClose={()=>setModal(null)}>
-        <textarea value={announcement} onChange={e=>setAnnouncement(e.target.value)} placeholder="Nhập thông báo hiển thị cho tất cả người chơi..." style={{...iS, minHeight:100, marginBottom:16}}></textarea>
+      {modal==='announcement' && <MBox title="📢 Gửi Thông Báo" onClose={()=>setModal(null)}>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+          {["Sắp tới phần trao giải, mời mọi người tập hợp!","Xin mời Cúp Vàng và Cúp Bạc vào sân chuẩn bị!","Xin các VĐV nộp hình ảnh Bill chuyển khoản để xác nhận!","Xe máy xin vui lòng dắt sang bãi kế bên!"].map(txt=>(
+            <button key={txt} type="button" onClick={()=>setAnnouncement(txt)} style={{...bS,textAlign:'left',padding:'10px 12px',fontSize:13,border:`1px solid ${announcement===txt?G.accent:G.border}`,color:announcement===txt?G.accent:G.text}}>{txt}</button>
+          ))}
+        </div>
+        <textarea value={announcement} onChange={e=>setAnnouncement(e.target.value)} placeholder="Hoặc tự gõ thông báo tuỳ chỉnh..." style={{...iS, minHeight:80, marginBottom:16}}></textarea>
         <div style={{display:'flex', gap:8}}>
-           <button type="button" onClick={()=>{try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement}));}catch{}; showT('Đã gửi thông báo 📢'); setModal(null);}} style={{...bP,flex:1}}>Gửi Banner 📢</button>
-           <button type="button" onClick={()=>{setAnnouncement(''); try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement:''}));}catch{}; showT('Đã xoá thông báo'); setModal(null);}} style={{...bS,color:G.red,border:`1px solid ${G.red}44`}}>Xoá ✕</button>
+           <button type="button" onClick={()=>{try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement}));}catch{}; showT('Đã gửi thông báo 📢'); setModal(null);}} style={{...bP,flex:1}}>Phát Banner 📢</button>
+           <button type="button" onClick={()=>{setAnnouncement(''); try{localStorage.setItem('pb_os_state',JSON.stringify({...JSON.parse(localStorage.getItem('pb_os_state')||'{}'), announcement:''}));}catch{}; showT('Đã xoá thông báo'); setModal(null);}} style={{...bS,color:G.red,border:`1px solid ${G.red}44`}}>Tắt ✕</button>
         </div>
       </MBox>}
       {scoreTarget&&scoreMatch&&<ScoreModal match={scoreMatch} onConfirm={handleScore} onClose={()=>setScoreTarget(null)}/>}
@@ -402,26 +410,26 @@ export default function AdminDashboard() {
       </main>
 
       {/* Payment Alerts Banner */}
-      {paymentAlerts.length > 0 && isSA && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 p-3">
-          <div className="text-xs font-bold text-amber-500 mb-2 flex items-center gap-2">
+      {paymentAlerts.length > 0 && (isSA || me.role===ROLES.HOST) && (
+        <div style={{background:G.gold+'18', borderBottom:`1px solid ${G.gold}44`, padding:'10px 16px'}}>
+          <div style={{fontSize:11, fontWeight:800, color:G.gold, marginBottom:8, display:'flex', alignItems:'center', gap:6}}>
             <span>💰 CÓ {paymentAlerts.length} YÊU CẦU XÁC NHẬN THANH TOÁN</span>
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <div style={{width:8, height:8, borderRadius:'50%', background:G.red, animation:'pulse-neon 1.5s infinite'}} />
           </div>
-          <div className="flex flex-col gap-2">
-            {paymentAlerts.map(pa => (
-              <div key={pa.id} className="bg-slate-800/80 rounded-xl border border-slate-700 p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-xl">{pa.method==="cash"?"💵":pa.method==="qr_auto"?"📱":"🧾"}</div>
+          <div style={{display:'flex', flexDirection:'column', gap:8}}>
+            {paymentAlerts.map((pa:any) => (
+              <div key={pa.id} style={{background:G.card, borderRadius:12, border:`1px solid ${G.border}`, padding:12, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                <div style={{display:'flex', alignItems:'center', gap:12}}>
+                  <div style={{fontSize:24}}>{pa.method==="cash"?"💵":pa.method==="qr_auto"?"📱":"🧾"}</div>
                   <div>
-                    <div className="text-sm font-bold text-slate-100">{pa.playerName}</div>
-                    <div className="text-xs text-slate-400 mt-1">{pa.method==="cash"?"Nộp tiền mặt":pa.method==="qr_auto"?"Quét QR Momo":"Upload biên lai"}</div>
+                    <div style={{fontSize:14, fontWeight:700, color:'#fff'}}>{pa.playerName}</div>
+                    <div style={{fontSize:11, color:G.muted, marginTop:2}}>{pa.method==="cash"?"Nộp tiền mặt":pa.method==="qr_auto"?"Quét QR Momo":"Upload biên lai"}</div>
                   </div>
                 </div>
-                <div className="flex gap-2 items-center">
-                  {pa.billBase64 && <button onClick={()=>{const w=window.open("","_blank");w?.document.write(`<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;"><img src="${pa.billBase64}" style="max-width:100%;max-height:100vh;object-fit:contain;"/></div>`);}} className="bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/20">Xem Bill 🖼️</button>}
-                  <button onClick={()=>handleApprovePayment(pa.id, pa.playerId)} className="bg-emerald-500 text-black px-3 py-1.5 rounded-lg text-xs font-bold">Đã nhận tiền ✅</button>
-                  <button onClick={()=>handleRejectPayment(pa.id)} className="border border-red-500/30 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold">Xoá ✕</button>
+                <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                  {pa.billBase64 && <button type="button" onClick={()=>{const w=window.open("","_blank");w?.document.write(`<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;"><img src="${pa.billBase64}" style="max-width:100%;max-height:100vh;object-fit:contain;"/></div>`);}} style={{...bS, color:G.accent, border:`1px solid ${G.accent}44`, padding:'6px 14px', fontSize:11}}>Xem Bill 🖼️</button>}
+                  <button type="button" onClick={()=>handleApprovePayment(pa.id, pa.playerId)} style={{...bP, background:G.accent, color:'#000', padding:'6px 14px', fontSize:11}}>Đã nhận tiền ✅</button>
+                  <button type="button" onClick={()=>handleRejectPayment(pa.id)} style={{...bS, color:G.red, border:`1px solid ${G.red}44`, padding:'6px 14px', fontSize:11}}>Xoá ✕</button>
                 </div>
               </div>
             ))}
