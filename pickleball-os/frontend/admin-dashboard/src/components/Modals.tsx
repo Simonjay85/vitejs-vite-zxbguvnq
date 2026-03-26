@@ -5,16 +5,76 @@ import { MBox, Fld, Overlay } from '../../../shared/components/Modal';
 
 // ── Event Modal
 export function EventModal({event,onSave,onClose,isNew}: {event?:any,onSave:(e:any)=>void,onClose:()=>void,isNew?:boolean}) {
-  const [name,setName] = useState(event?.name||''); const [loc,setLoc] = useState(event?.location||''); const [note,setNote] = useState(event?.note||'');
-  const todayStr = () => new Date().toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
-  const save = () => { if(!name.trim()) return; onSave({...event,name:name.trim(),location:loc.trim(),note:note.trim(),date:event?.date||todayStr(),id:event?.id||`ev_${uid()}`,createdAt:event?.createdAt||new Date().toISOString()}); onClose(); };
-  return <MBox title={isNew?'🗓️ Tạo Event mới':'✏️ Sửa Event'} onClose={onClose} w={420}>
-    <Fld label="TÊN EVENT *"><input value={name} onChange={e=>setName(e.target.value)} placeholder="VD: Sân Thủ Đức Thứ 7..." style={iS} autoFocus onKeyDown={e=>e.key==='Enter'&&save()}/></Fld>
-    <Fld label="ĐỊA ĐIỂM"><input value={loc} onChange={e=>setLoc(e.target.value)} placeholder="VD: Sân Olympia..." style={iS}/></Fld>
-    <Fld label="GHI CHÚ"><input value={note} onChange={e=>setNote(e.target.value)} placeholder="Phí sân, nước uống..." style={iS}/></Fld>
-    <div style={{display:'flex',gap:8}}>
-      <button onClick={save} disabled={!name.trim()} style={{...bP,flex:1,opacity:name.trim()?1:.4}}>{isNew?'✅ Tạo Event':'💾 Lưu'}</button>
-      <button onClick={onClose} style={bS}>Huỷ</button>
+  const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const [name,setName] = useState(event?.name||'');
+  const [date,setDate] = useState(event?.date||todayStr());
+  const [loc,setLoc] = useState(event?.location||'');
+  const [courts,setCourts] = useState<number|'custom'>(event?.courtsCount||5);
+  const [customCourts,setCustomCourts] = useState(event?.courtsCount?.toString()||'');
+  const [maxPlayers,setMaxPlayers] = useState<number|'inf'|'custom'>(event?.maxPlayers||'inf');
+  const [customPlayers,setCustomPlayers] = useState(event?.maxPlayers?.toString()||'');
+  const [mode,setMode] = useState(event?.mode||'normal');
+  const [updateDupr,setUpdateDupr] = useState(event?.updateDupr||false);
+  const [courtFee,setCourtFee] = useState(event?.courtFee||'');
+  const [otherFee,setOtherFee] = useState(event?.otherFee||'');
+  const [feeNote,setFeeNote] = useState(event?.note||'');
+
+  const save = () => {
+    if(!name.trim()) return;
+    const finalCourts = courts==='custom'?parseInt(customCourts)||5:courts;
+    const finalPlayers = maxPlayers==='custom'?parseInt(customPlayers)||999:maxPlayers==='inf'?999:maxPlayers;
+    onSave({...event,name:name.trim(),location:loc.trim(),date,courtsCount:finalCourts,maxPlayers:finalPlayers,mode,updateDupr,courtFee,otherFee,note:feeNote.trim(),id:event?.id||`ev_${uid()}`,createdAt:event?.createdAt||new Date().toISOString()});
+    onClose();
+  };
+
+  const btnSel = (sel:boolean) => ({padding:'8px 0',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:14,border:`2px solid ${sel?G.accent:G.border}`,background:sel?G.accent+'22':'transparent',color:sel?G.accent:G.muted});
+
+  return <MBox title={isNew?'🗓️ Tạo Event mới':'✏️ Sửa Event'} onClose={onClose} w={560}>
+    <Fld label="TÊN EVENT *"><input value={name} onChange={e=>setName(e.target.value)} placeholder="VD: Social Thứ 7 Quận 2..." style={iS} autoFocus/></Fld>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      <Fld label="📅 NGÀY"><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={iS}/></Fld>
+      <Fld label="📍 ĐỊA ĐIỂM"><input value={loc} onChange={e=>setLoc(e.target.value)} placeholder="Tên sân..." style={iS}/></Fld>
+    </div>
+    
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1.5fr',gap:16}}>
+      <Fld label="🏟️ SỐ SÂN">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:8}}>
+          {[2,3,4,5,6,7,8].map(n=><button key={n} type="button" onClick={()=>setCourts(n)} style={btnSel(courts===n)}>{n}</button>)}
+          <button type="button" onClick={()=>setCourts('custom')} style={btnSel(courts==='custom')} title="Tuỳ chỉnh">✏️</button>
+        </div>
+        {courts==='custom' && <input type="number" value={customCourts} onChange={e=>setCustomCourts(e.target.value)} placeholder="Nhập số sân..." style={{...iS,fontSize:13}}/>}
+      </Fld>
+      <Fld label="👥 SỐ NGƯỜI DỰ KIẾN">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:8}}>
+          {['inf',8,12,16,20,24,28,32].map(n=><button key={n} type="button" onClick={()=>setMaxPlayers(n as any)} style={btnSel(maxPlayers===n)}>{n==='inf'?'∞':n}</button>)}
+        </div>
+        {maxPlayers==='custom' || !['inf',8,12,16,20,24,28,32].includes(maxPlayers as any) ? (
+          <input type="number" value={customPlayers} onChange={e=>{setCustomPlayers(e.target.value);setMaxPlayers('custom');}} placeholder="Nhập số tuỳ ý (VD: 33)..." style={{...iS,fontSize:13}}/>
+        ):<button onClick={()=>setMaxPlayers('custom')} style={{...btnSel(false),width:'100%',padding:'12px',fontSize:13}}>Nhập số tuỳ ý...</button>}
+      </Fld>
+    </div>
+
+    <Fld label="CHẾ ĐỘ CHƠI">
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        {[{v:'normal',l:'🚀 Thường'},{v:'ladder',l:'📈 Leo thang'},{v:'king',l:'👑 Vua sân'}].map(m=><button key={m.v} type="button" onClick={()=>setMode(m.v)} style={{flex:1,...btnSel(mode===m.v)}}>{m.l}</button>)}
+      </div>
+      <label style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:G.panel,border:`1px solid ${G.border}`,borderRadius:10,cursor:'pointer'}}>
+        <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${updateDupr?G.accent:G.muted}`,background:updateDupr?G.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>{updateDupr&&<span style={{color:'#000',fontSize:14,fontWeight:900}}>✓</span>}</div>
+        <div><div style={{fontWeight:800,fontSize:13,color:G.text}}>Cập nhật điểm DUPR</div><div style={{fontSize:11,color:G.muted}}>Tự động đẩy kết quả lên hệ thống DUPR toàn cầu</div></div>
+        <input type="checkbox" checked={updateDupr} onChange={e=>setUpdateDupr(e.target.checked)} style={{display:'none'}}/>
+      </label>
+    </Fld>
+
+    <div style={{fontSize:11,fontWeight:800,color:G.gold,marginBottom:8,letterSpacing:1}}>💰 CHI PHÍ BUỔI CHƠI</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:12}}>
+      <Fld label="GIÁ SÂN (nhập nghìn đ, VD: 500 = 500k)"><input type="number" value={courtFee} onChange={e=>setCourtFee(e.target.value)} placeholder="500" style={iS}/></Fld>
+      <Fld label="CHI PHÍ KHÁC (nhập nghìn đ, VD: 200 = 200k)"><input type="number" value={otherFee} onChange={e=>setOtherFee(e.target.value)} placeholder="200" style={iS}/></Fld>
+    </div>
+    <Fld label="GHI CHÚ CHI PHÍ"><input value={feeNote} onChange={e=>setFeeNote(e.target.value)} placeholder="VD: Áo đồng phục 150k cho thành viên mới..." style={iS}/></Fld>
+
+    <div style={{display:'flex',gap:8,marginTop:8}}>
+      <button onClick={save} disabled={!name.trim()} style={{...bP,flex:1,opacity:name.trim()?1:.4,padding:'14px 0',fontSize:15}}>{isNew?'🚀 Tạo Event':'💾 Lưu'}</button>
+      <button onClick={onClose} style={{...bS,padding:'14px 24px'}}>Huỷ</button>
     </div>
   </MBox>;
 }

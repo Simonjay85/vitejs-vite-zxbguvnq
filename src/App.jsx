@@ -116,35 +116,35 @@ function buildSeed(dbPlayers){
 const defaultAccounts = () => ({admins:[{id:"sa_root",name:"Super Admin",role:ROLES.SA,password:"admin2024"}],hosts:[],viewerCode:genCode()});
 
 // ── DESIGN TOKENS
-const G={bg:"#060c18",panel:"#0b1524",card:"#0f1e33",border:"#172840",accent:"#00c9a7",blue:"#3b82f6",gold:"#f59e0b",red:"#f43f5e",purple:"#a78bfa",pink:"#f472b6",text:"#dde6f5",muted:"#4a6480",dim:"#223044"};
-const iS={background:G.card,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.text,fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"};
-const bP={padding:"8px 14px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12};
-const bS={padding:"6px 11px",borderRadius:8,border:`1px solid ${G.border}`,background:"transparent",color:G.muted,fontWeight:600,cursor:"pointer",fontSize:11};
-const bR={padding:"5px 9px",borderRadius:7,border:`1px solid ${G.red}44`,background:"transparent",color:G.red,fontWeight:600,cursor:"pointer",fontSize:10};
+const G={bg:"#0e0f11",panel:"#1c1d22",card:"#24262c",border:"#2e3138",accent:"#d4ff00",blue:"#2f80ed",gold:"#f2c94c",red:"#eb5757",purple:"#9b51e0",pink:"#ff79c6",text:"#ffffff",muted:"#767a85",dim:"#4a4e59"};
+const iS={background:G.panel,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 14px",color:G.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"};
+const bP={padding:"12px 18px",borderRadius:12,border:"none",background:G.accent,color:"#000",fontWeight:800,cursor:"pointer",fontSize:13,boxShadow:"0 4px 15px rgba(212,255,0,0.2)"};
+const bS={padding:"10px 16px",borderRadius:12,border:`1px solid ${G.border}`,background:G.card,color:G.text,fontWeight:700,cursor:"pointer",fontSize:12};
+const bR={padding:"8px 12px",borderRadius:10,border:`1px solid ${G.red}44`,background:"rgba(235,87,87,0.1)",color:G.red,fontWeight:700,cursor:"pointer",fontSize:11};
 
 // ── ATOMS
-const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:700}}>{skill||"?"}</span>;};
-const GBadge=({gender})=>{const c=gender==="M"?"#60a5fa":"#f472b6";return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"20",color:c,fontWeight:700}}>{gender==="M"?"♂":"♀"}</span>;};
-const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];return <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:o.color+"20",color:o.color,fontWeight:600}}>{o.label}</span>;};
-const CBadge=({type})=><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:G.pink+"25",color:G.pink,fontWeight:700}}>{type==="spouse"?"💍":"💑"}</span>;
-const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?9:10,padding:sm?"1px 5px":"2px 8px",borderRadius:3,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:700}}>{label}</span>;};
-const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f59e0b"},[ROLES.HOST]:{l:"🎮 Host",c:"#a78bfa"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#4a6480"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:r.c+"20",color:r.c,fontWeight:700,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
-const SaveDot=({saving})=><span title={saving?"Đang lưu...":"Đã lưu"} style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:saving?"#f59e0b":"#00c9a7",boxShadow:saving?"0 0 6px #f59e0b88":"0 0 6px #00c9a744",transition:"background .4s"}}></span>;
+const SBadge=({skill})=>{const c=SKILL_COLOR[skill]||G.muted;return <span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:c+"25",color:c,border:`1px solid ${c}44`,fontWeight:800}}>{skill||"?"}</span>;};
+const GBadge=({gender})=>{const c=gender==="M"?"#2f80ed":"#ff79c6";return <span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:c+"20",color:c,fontWeight:800}}>{gender==="M"?"♂":"♀"}</span>;};
+const DBadge=({dtype})=>{const o=DTYPE_OPT.find(d=>d.val===dtype)||DTYPE_OPT[3];return <span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:o.color+"20",color:o.color,fontWeight:700}}>{o.label}</span>;};
+const CBadge=({type})=><span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:G.pink+"25",color:G.pink,fontWeight:800}}>{type==="spouse"?"💍":"💑"}</span>;
+const Chip=({label,color,sm})=>{const c=color||G.muted;return <span style={{fontSize:sm?9:10,padding:sm?"2px 6px":"4px 10px",borderRadius:6,background:c+"20",color:c,border:`1px solid ${c}30`,fontWeight:800}}>{label}</span>;};
+const RBadge=({role})=>{const m={[ROLES.SA]:{l:"👑 Super Admin",c:"#f2c94c"},[ROLES.HOST]:{l:"🎮 Host",c:"#9b51e0"},[ROLES.VIEWER]:{l:"👁 Viewer",c:"#767a85"}};const r=m[role]||m[ROLES.VIEWER];return <span style={{fontSize:10,padding:"4px 8px",borderRadius:6,background:r.c+"20",color:r.c,fontWeight:800,border:`1px solid ${r.c}40`}}>{r.l}</span>;};
+const SaveDot=({saving})=><span title={saving?"Đang lưu...":"Đã lưu"} style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:saving?"#f2c94c":"#d4ff00",boxShadow:saving?"0 0 8px #f2c94c88":"0 0 8px #d4ff0055",transition:"background .4s"}}></span>;
 
 function Toast({msg,type,onClose}){
   useEffect(()=>{const t=setTimeout(onClose,3400);return()=>clearTimeout(t);},[]);
   const c=type==="error"?G.red:type==="warn"?G.gold:G.accent;
-  return <div style={{position:"fixed",top:12,right:12,zIndex:9999,background:G.panel,border:`1px solid ${c}`,borderRadius:10,padding:"9px 14px",color:c,fontSize:12,fontWeight:600,maxWidth:360,boxShadow:"0 8px 32px #000d",animation:"tIn .22s ease",display:"flex",alignItems:"center",gap:8}}>
-    <span>{msg}</span><button onClick={onClose} style={{background:"none",border:"none",color:c,cursor:"pointer",fontSize:13}}>✕</button>
+  return <div style={{position:"fixed",top:20,right:20,zIndex:9999,background:G.card,border:`1px solid ${c}aa`,borderRadius:12,padding:"14px 20px",color:c,fontSize:13,fontWeight:700,maxWidth:380,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",animation:"tIn .22s ease",display:"flex",alignItems:"center",gap:12}}>
+    <span>{msg}</span><button onClick={onClose} style={{background:"none",border:"none",color:c,cursor:"pointer",fontSize:14,fontWeight:900}}>✕</button>
   </div>;
 }
-const Overlay=({children,onClose})=><div onClick={e=>{if(e.target===e.currentTarget)onClose&&onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.88)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>{children}</div>;
-const MBox=({title,sub,onClose,children,w=440})=><Overlay onClose={onClose}><div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:24,width:w,maxWidth:"96vw",maxHeight:"92vh",overflowY:"auto"}}>
-  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-    <div><div style={{fontSize:16,fontWeight:800,color:G.text}}>{title}</div>{sub&&<div style={{fontSize:10,color:G.muted,marginTop:2}}>{sub}</div>}</div>
-    <button onClick={onClose} style={{...bS,padding:"3px 8px",fontSize:14}}>✕</button>
+const Overlay=({children,onClose})=><div onClick={e=>{if(e.target===e.currentTarget)onClose&&onClose();}} style={{position:"fixed",inset:0,background:"rgba(14,15,17,0.85)",backdropFilter:"blur(8px)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>{children}</div>;
+const MBox=({title,sub,onClose,children,w=440})=><Overlay onClose={onClose}><div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:20,padding:28,width:w,maxWidth:"96vw",maxHeight:"92vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.8)",animation:"fadeIn 0.2s ease"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+    <div><div style={{fontSize:24,fontFamily:"'Bebas Neue', sans-serif",color:G.text,letterSpacing:1,lineHeight:1.2}}>{title}</div>{sub&&<div style={{fontSize:11,fontWeight:700,color:G.muted,marginTop:4,textTransform:"uppercase",letterSpacing:0.5}}>{sub}</div>}</div>
+    <button onClick={onClose} style={{background:"transparent",border:"none",color:G.muted,fontSize:18,cursor:"pointer"}}>✕</button>
   </div>{children}</div></Overlay>;
-const Fld=({label,children,hint})=><div style={{marginBottom:13}}><div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:.8,marginBottom:5}}>{label}</div>{children}{hint&&<div style={{fontSize:9,color:G.dim,marginTop:4}}>{hint}</div>}</div>;
+const Fld=({label,children,hint})=><div style={{marginBottom:16}}><div style={{fontSize:11,color:G.muted,fontWeight:800,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>{label}</div>{children}{hint&&<div style={{fontSize:11,color:G.dim,marginTop:6}}>{hint}</div>}</div>;
 
 // ══════════════════════════════════════
 // EVENT MODAL — tạo / đổi tên event
