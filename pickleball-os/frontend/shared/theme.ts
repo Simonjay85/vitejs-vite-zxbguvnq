@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 // ── Core palette (khớp app cũ)
 export const G = {
   bg:     "#060c18",
@@ -49,21 +50,21 @@ export const getTier = (k: number) => {
 export const ROLES = {SA:"super_admin", HOST:"host", VIEWER:"viewer"} as const;
 
 // ── Component style presets (inline style objects)
-export const iS: React.CSSProperties = {
+export const iS: CSSProperties = {
   background: G.card, border: `1px solid ${G.border}`, borderRadius: 8,
   padding: "8px 12px", color: G.text, fontSize: 13, outline: "none",
   width: "100%", boxSizing: "border-box",
 };
-export const bP: React.CSSProperties = {
+export const bP: CSSProperties = {
   padding: "8px 14px", borderRadius: 8, border: "none",
   background: `linear-gradient(135deg,${G.accent},${G.blue})`,
   color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 12,
 };
-export const bS: React.CSSProperties = {
+export const bS: CSSProperties = {
   padding: "6px 11px", borderRadius: 8, border: `1px solid ${G.border}`,
   background: "transparent", color: G.muted, fontWeight: 600, cursor: "pointer", fontSize: 11,
 };
-export const bR: React.CSSProperties = {
+export const bR: CSSProperties = {
   padding: "5px 9px", borderRadius: 7, border: `1px solid ${G.red}44`,
   background: "transparent", color: G.red, fontWeight: 600, cursor: "pointer", fontSize: 10,
 };
@@ -125,5 +126,4 @@ export const Theme = {
   radii: { sm: "8px", md: "12px", lg: "16px", xl:"24px", full: "9999px" }
 };
 
-import React from 'react';
 

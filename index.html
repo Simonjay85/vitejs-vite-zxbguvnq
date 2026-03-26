@@ -1529,100 +1529,121 @@ function Minigames() {
 // TV MODE
 // ══════════════════════════════════════
 function TVMode({courts,elapsed,queue,players,history,onClose,activeEvent}){
-  const top6=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,6);
-  const n = courts.length;
-  const cols = n<=2?"repeat(2,1fr)":n===3?"repeat(3,1fr)":n===4?"repeat(2,1fr)":n<=6?"repeat(3,1fr)":"repeat(4,1fr)";
-  const liveCount = courts.filter(c=>c.match).length;
-  const ci = players.filter(p=>p?.checkedIn).length;
-  return <div style={{position:"fixed",inset:0,zIndex:800,background:"#080B10",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,sans-serif"}}>
-    {/* Header */}
-    <div style={{padding:"8px 20px",background:"#0D1117",borderBottom:"2px solid rgba(0,255,178,0.15)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-      <div style={{display:"flex",alignItems:"center",gap:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:G.accent,boxShadow:`0 0 8px ${G.accent}`}}/>
-          <span style={{fontSize:18,fontWeight:900,letterSpacing:3,color:"#fff"}}>PICKLEBALL SOCIAL</span>
-        </div>
-        {activeEvent&&<span style={{fontSize:11,color:G.accent,fontWeight:800,padding:"3px 10px",borderRadius:20,border:"1px solid rgba(0,255,178,0.3)",background:"rgba(0,255,178,0.08)"}}>{activeEvent.name}</span>}
-        {activeEvent?.updateDUPR&&<span style={{background:"#1e3a8a",color:"#fff",padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:800,border:"1px solid #3b82f6"}}>DUPR</span>}
-      </div>
+  const top5=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k).slice(0,5);
+  const n=courts.length;
+  // iPad layout: keep courts visible on one screen
+  // 1-2 courts → 2 col; 3 → 3 col; 4-6 → 3 col; 7+ → 4 col
+  const cols=n<=2?"repeat(2,1fr)":n===3?"repeat(3,1fr)":n<=6?"repeat(3,1fr)":"repeat(4,1fr)";
+  const liveCount=courts.filter(c=>c.match).length;
+  const ci=players.filter(p=>p?.checkedIn).length;
+  const waiting=players.filter(p=>p?.checkedIn&&!courts.some(c=>c.match&&[...(c.match.team1||[]),...(c.match.team2||[])].some(mp=>mp?.id===p.id)));
+  return <div style={{position:"fixed",inset:0,zIndex:800,background:"#080B10",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,sans-serif",overflow:"hidden"}}>
+
+    {/* HEADER — 48px */}
+    <div style={{height:48,minHeight:48,padding:"0 16px",background:"#0D1117",borderBottom:"2px solid rgba(0,255,178,0.15)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
-        <div style={{display:"flex",gap:8}}>
-          <div style={{padding:"4px 12px",borderRadius:20,background:"rgba(0,255,178,0.1)",border:"1px solid rgba(0,255,178,0.3)",fontSize:11,fontWeight:800,color:G.accent}}>✅ {ci} check-in</div>
-          <div style={{padding:"4px 12px",borderRadius:20,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",fontSize:11,fontWeight:800,color:G.red}}>● {liveCount} đang đấu</div>
-          <div style={{padding:"4px 12px",borderRadius:20,background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.3)",fontSize:11,fontWeight:800,color:G.blue}}>⏳ {queue.length} chờ</div>
-        </div>
-        <button onClick={onClose} style={{padding:"6px 14px",borderRadius:10,border:"1px solid #1E2A3A",background:"transparent",color:G.muted,fontWeight:700,cursor:"pointer",fontSize:11}}>✕ Đóng</button>
+        <div style={{width:8,height:8,borderRadius:"50%",background:G.accent,boxShadow:`0 0 10px ${G.accent}`,animation:"ping 2s infinite"}}/>
+        <span style={{fontSize:16,fontWeight:900,letterSpacing:2,color:"#fff"}}>🏓 PICKLEBALL SOCIAL</span>
+        {activeEvent&&<span style={{fontSize:10,color:G.accent,fontWeight:800,padding:"2px 9px",borderRadius:20,border:"1px solid rgba(0,255,178,0.3)",background:"rgba(0,255,178,0.08)"}}>{activeEvent.name}</span>}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{padding:"4px 10px",borderRadius:20,background:"rgba(0,255,178,0.1)",border:"1px solid rgba(0,255,178,0.3)",fontSize:11,fontWeight:800,color:G.accent}}>✅ {ci} check-in</div>
+        <div style={{padding:"4px 10px",borderRadius:20,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",fontSize:11,fontWeight:800,color:G.red}}>🔴 {liveCount} live</div>
+        <div style={{padding:"4px 10px",borderRadius:20,background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.3)",fontSize:11,fontWeight:800,color:G.blue}}>⏳ {waiting.length} chờ</div>
+        <button onClick={onClose} style={{padding:"5px 12px",borderRadius:9,border:"1px solid #1E2A3A",background:"transparent",color:G.muted,fontWeight:700,cursor:"pointer",fontSize:11}}>✕ Đóng</button>
       </div>
     </div>
 
-    {/* Courts grid */}
-    <div style={{flex:1,display:"flex",flexDirection:"column",gap:10,padding:"12px 14px",overflow:"hidden"}}>
-      <div style={{flex:1,display:"grid",gridTemplateColumns:cols,gap:10}}>
+    {/* BODY: courts + sidebar in flex row */}
+    <div style={{flex:1,display:"flex",gap:10,padding:"10px",overflow:"hidden",minHeight:0}}>
+
+      {/* Courts grid — takes ~75% of width */}
+      <div style={{flex:1,display:"grid",gridTemplateColumns:cols,gridAutoRows:"1fr",gap:8,minHeight:0}}>
         {courts.map(ct=>{
           const m=ct.match;
           const el=elapsed[ct.id]||0;
           const mm=String(Math.floor(el/60)).padStart(2,"0"),ss=String(el%60).padStart(2,"0");
-          const dc=DTYPE_OPT.find(d=>d.val===(m?.dtype||"any"))||DTYPE_OPT[3];
           const diff=m?Math.abs(teamElo(m.team1)-teamElo(m.team2)):0;
-          return <div key={ct.id} style={{background:m?"rgba(0,255,178,0.04)":"#0D1117",borderRadius:20,border:`2px solid ${m?"rgba(0,255,178,0.25)":"#1E2A3A"}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:m?"0 4px 24px rgba(0,255,178,0.08)":"none"}}>
-            <div style={{padding:"10px 14px",background:m?"rgba(0,255,178,0.06)":"rgba(255,255,255,0.02)",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #1E2A3A"}}>
-              <span style={{fontSize:14,fontWeight:900,color:"#fff"}}>{ct.name}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {m&&<span style={{fontFamily:"'SF Mono',Consolas,monospace",fontSize:16,fontWeight:900,color:G.accent,letterSpacing:1}}>{mm}:{ss}</span>}
-                <div style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:800,
-                  background:m?"rgba(0,255,178,0.15)":"transparent",
-                  color:m?G.accent:G.muted,
-                  border:`1px solid ${m?"rgba(0,255,178,0.4)":"#1E2A3A"}`}}>
-                  {m?"● LIVE":"TRỐNG"}
-                </div>
+          return <div key={ct.id} style={{background:m?"rgba(0,255,178,0.04)":"#0D1117",borderRadius:16,border:`2px solid ${m?"rgba(0,255,178,0.3)":"#1E2A3A"}`,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+            {/* Court header */}
+            <div style={{padding:"8px 12px",background:m?"rgba(0,255,178,0.07)":"rgba(255,255,255,0.02)",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #1E2A3A",flexShrink:0}}>
+              <span style={{fontSize:13,fontWeight:900,color:"#fff"}}>{ct.name}</span>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                {m&&<span style={{fontFamily:"monospace",fontSize:14,fontWeight:900,color:G.accent}}>{mm}:{ss}</span>}
+                <span style={{padding:"2px 8px",borderRadius:20,fontSize:9,fontWeight:800,background:m?"rgba(0,255,178,0.15)":"transparent",color:m?G.accent:G.muted,border:`1px solid ${m?"rgba(0,255,178,0.4)":"#1E2A3A"}`}}>{m?"● LIVE":"TRỐNG"}</span>
               </div>
             </div>
-            <div style={{flex:1,padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-              {m?<>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 48px 1fr",gap:8,alignItems:"center"}}>
-                  <div style={{background:"rgba(0,255,178,0.06)",borderRadius:12,padding:"10px",border:"1px solid rgba(0,255,178,0.15)"}}>
-                    <div style={{fontSize:9,color:G.accent,fontWeight:800,letterSpacing:1,marginBottom:5}}>TEAM A</div>
-                    {(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:2}}>{safe(p.name)}</div>)}
-                    <div style={{fontSize:9,color:G.accent,marginTop:4}}>⌀ {teamElo(m.team1)}</div>
-                  </div>
-                  <div style={{textAlign:"center"}}>
-                    <div style={{fontSize:16,fontWeight:900,color:G.muted}}>VS</div>
-                    <div style={{fontSize:10,color:diff<40?G.accent:G.gold,marginTop:2}}>Δ{diff}</div>
-                  </div>
-                  <div style={{background:"rgba(245,158,11,0.06)",borderRadius:12,padding:"10px",border:"1px solid rgba(245,158,11,0.15)",textAlign:"right"}}>
-                    <div style={{fontSize:9,color:G.gold,fontWeight:800,letterSpacing:1,marginBottom:5}}>TEAM B</div>
-                    {(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:2}}>{safe(p.name)}</div>)}
-                    <div style={{fontSize:9,color:G.gold,marginTop:4}}>⌀ {teamElo(m.team2)}</div>
-                  </div>
+            {/* Court body */}
+            <div style={{flex:1,padding:"10px 12px",display:"flex",flexDirection:"column",justifyContent:"center",minHeight:0}}>
+              {m?<div style={{display:"grid",gridTemplateColumns:"1fr 36px 1fr",gap:6,alignItems:"center"}}>
+                <div style={{background:"rgba(0,255,178,0.06)",borderRadius:10,padding:"8px 10px",border:"1px solid rgba(0,255,178,0.15)"}}>
+                  <div style={{fontSize:8,color:G.accent,fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAM A</div>
+                  {(m.team1||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.3}}>{safe(p.name)}</div>)}
+                  <div style={{fontSize:9,color:G.accent,marginTop:4,fontWeight:700}}>ELO {teamElo(m.team1)}</div>
                 </div>
-              </>:<div style={{textAlign:"center",padding:"8px 0"}}>
-                <div style={{fontSize:32,marginBottom:6}}>🏓</div>
-                <div style={{fontSize:12,color:G.muted}}>Sân trống</div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:13,fontWeight:900,color:G.muted}}>VS</div>
+                  <div style={{fontSize:9,color:diff<40?G.accent:G.gold,fontWeight:700}}>Δ{diff}</div>
+                </div>
+                <div style={{background:"rgba(245,158,11,0.06)",borderRadius:10,padding:"8px 10px",border:"1px solid rgba(245,158,11,0.15)",textAlign:"right"}}>
+                  <div style={{fontSize:8,color:G.gold,fontWeight:800,letterSpacing:1,marginBottom:4}}>TEAM B</div>
+                  {(m.team2||[]).filter(Boolean).map(p=><div key={p.id} style={{fontSize:12,fontWeight:700,color:"#fff",lineHeight:1.3}}>{safe(p.name)}</div>)}
+                  <div style={{fontSize:9,color:G.gold,marginTop:4,fontWeight:700}}>ELO {teamElo(m.team2)}</div>
+                </div>
+              </div>
+              :<div style={{textAlign:"center"}}>
+                <div style={{fontSize:28,marginBottom:4}}>🏓</div>
+                <div style={{fontSize:11,color:G.muted}}>Sân trống</div>
               </div>}
             </div>
           </div>;
         })}
       </div>
 
-      {/* Bottom ticker */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,flexShrink:0}}>
-        <div style={{background:"#0D1117",borderRadius:14,padding:"10px 14px",border:"1px solid rgba(59,130,246,0.2)"}}>
-          <div style={{fontSize:10,letterSpacing:3,color:G.blue,marginBottom:6,fontWeight:800}}>⚡ Hàng chờ ({queue.length})</div>
-          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-            {queue.slice(0,3).map((q,i)=><div key={i} style={{fontSize:11,color:G.text,background:"#1E2A3A",padding:"3px 8px",borderRadius:6}}>{(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} <span style={{color:G.muted}}>vs</span> {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}</div>)}
-            {!queue.length&&<div style={{color:G.dim,fontSize:11}}>Queue trống</div>}
+      {/* RIGHT SIDEBAR — ~200px: queue + waiting + leaderboard */}
+      <div style={{width:190,display:"flex",flexDirection:"column",gap:8,flexShrink:0,overflow:"hidden"}}>
+
+        {/* Queue */}
+        <div style={{background:"#0D1117",borderRadius:12,padding:"10px 12px",border:"1px solid rgba(59,130,246,0.25)",flexShrink:0}}>
+          <div style={{fontSize:10,fontWeight:800,color:G.blue,letterSpacing:2,marginBottom:6}}>⚡ HÀNG CHỜ ({queue.length})</div>
+          {!queue.length
+            ?<div style={{fontSize:10,color:G.dim}}>Trống</div>
+            :<div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {queue.slice(0,4).map((q,i)=><div key={i} style={{fontSize:10,color:G.text,background:"#1E2A3A",padding:"3px 7px",borderRadius:6,lineHeight:1.3}}>
+                {(q.team1||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")} <span style={{color:G.muted}}>vs</span> {(q.team2||[]).filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join("+")}
+              </div>)}
+              {queue.length>4&&<div style={{fontSize:9,color:G.muted}}>+{queue.length-4} trận nữa</div>}
+            </div>
+          }
+        </div>
+
+        {/* Waiting players */}
+        <div style={{background:"#0D1117",borderRadius:12,padding:"10px 12px",border:"1px solid rgba(147,51,234,0.25)",flex:1,overflow:"hidden",minHeight:0,display:"flex",flexDirection:"column"}}>
+          <div style={{fontSize:10,fontWeight:800,color:G.purple,letterSpacing:2,marginBottom:6,flexShrink:0}}>⏳ ĐANG CHỜ ({waiting.length})</div>
+          <div style={{overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:3}}>
+            {waiting.slice(0,10).map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 6px",borderRadius:7,background:"#1E2A3A"}}>
+              <PlayerAvatar name={p.name} size={18} color={p.avatarColor}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+                <div style={{fontSize:8,color:G.muted}}>{p.skill||"?"}</div>
+              </div>
+            </div>)}
+            {waiting.length>10&&<div style={{fontSize:9,color:G.muted}}>+{waiting.length-10} người</div>}
           </div>
         </div>
-        <div style={{background:"#0D1117",borderRadius:14,padding:"10px 14px",border:"1px solid rgba(245,158,11,0.2)"}}>
-          <div style={{fontSize:10,letterSpacing:3,color:G.gold,marginBottom:6,fontWeight:800}}>🏆 TOP SEPC</div>
-          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-            {top6.map((p,i)=><div key={p.id} style={{display:"flex",gap:4,alignItems:"center"}}>
-              <span style={{fontSize:11,color:i===0?G.gold:G.muted,fontWeight:800}}>#{i+1}</span>
-              <span style={{fontSize:12,color:"#fff",fontWeight:700}}>{safe(p.name).split(" ").slice(-1)[0]}</span>
-              <span style={{fontSize:11,color:p.k>0?G.accent:G.red,fontWeight:900}}>{p.k>0?"+":""}{p.k}</span>
+
+        {/* Top SEPC leaderboard */}
+        <div style={{background:"#0D1117",borderRadius:12,padding:"10px 12px",border:"1px solid rgba(245,158,11,0.25)",flexShrink:0}}>
+          <div style={{fontSize:10,fontWeight:800,color:G.gold,letterSpacing:2,marginBottom:6}}>🏆 TOP SEPC</div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {top5.map((p,i)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:10,fontWeight:800,color:i===0?G.gold:i===1?"#9ca3af":i===2?"#b87333":G.muted,width:16}}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</span>
+              <span style={{fontSize:11,color:"#fff",fontWeight:700,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name).split(" ").slice(-1)[0]}</span>
+              <span style={{fontSize:11,fontWeight:900,color:p.k>0?G.accent:p.k<0?G.red:G.muted}}>{p.k>0?"+":""}{p.k}</span>
             </div>)}
           </div>
         </div>
+
       </div>
     </div>
   </div>;
@@ -2459,7 +2480,7 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     {i:"✅",l:"Check-in", v:ci,                                                       c:G.accent},
     {i:"⏳",l:"Chờ",     v:available.length,                                         c:G.purple},
     {i:"🔴",l:"Live",    v:liveCount,                                                c:G.red},
-    {i:"📋",l:"Queue",   v:queue.length,                                             c:"#f59e0b"},
+    {i:"📋",l:"Hàng chờ",   v:queue.length,                                             c:"#f59e0b"},
     {i:"🏆",l:"Trận xong",v:history.filter(h=>h.eventId===activeEvent?.id).length,  c:"#22C55E"},
   ];
   return <div>
@@ -2473,69 +2494,70 @@ function DashTab({courts,players,queue,history,elapsed,available,next,onScore,on
     </div>}
 
     {/* Stats grid — Pickleball Hub Style */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:12,marginBottom:20}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:14}}>
       {stats.map(s=>(
-        <div key={s.l} style={{background:G.card,backdropFilter:"blur(12px)",borderRadius:20,padding:"16px",border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 4px 24px rgba(0,0,0,0.2)"}}>
-          <div style={{display:"flex",flexDirection:"column"}}>
-            <div style={{fontSize:12,color:G.muted,fontWeight:600,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:16}}>{s.i}</span> {s.l}
-            </div>
-            <div style={{fontSize:28,fontWeight:900,color:"transparent",backgroundImage:G.grad,WebkitBackgroundClip:"text",lineHeight:1}}>{s.v}</div>
-          </div>
+        <div key={s.l} style={{background:G.card,borderRadius:14,padding:"12px 8px",border:`1px solid ${s.c}44`,textAlign:"center",boxShadow:`0 4px 20px ${s.c}18`}}>
+          <div style={{fontSize:20,marginBottom:2}}>{s.i}</div>
+          <div style={{fontSize:28,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div>
+          <div style={{fontSize:9,color:G.muted,fontWeight:700,marginTop:4,letterSpacing:.5}}>{s.l.toUpperCase()}</div>
         </div>
       ))}
     </div>
 
-    {/* Queue + Actions — stack dọc trên mobile */}
-    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:12,marginBottom:10}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:3,marginBottom:8}}>⚡ Hàng chờ {queue.length>0&&`(${queue.length})`}</div>
-      {!queue.length
-        ? <div style={{color:G.dim,fontSize:11,marginBottom:10}}>Queue trống</div>
-        : <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
-            {queue.slice(0,5).map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign}/>)}
-          </div>
-      }
-      {/* Action buttons — 2x2 grid trên mobile */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
-        
-        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`,fontSize:12,padding:"11px 8px"}}>✏️ Custom</button>
-        <button onClick={genQ}    style={{...bS,fontSize:12,padding:"11px 8px"}}>🎲 Tạo trận</button>
-        <button onClick={autoAss} style={{...bP,fontSize:12,padding:"11px 8px"}}>▶ Auto gán</button>
-      </div>
-    </div>
-
-    {/* Match notifications — full width, above courts grid */}
-    {matchNotifs&&matchNotifs.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:10,fontWeight:800,color:"#F59E0B",letterSpacing:2,marginBottom:8}}>🔔 THÔNG BÁO TRẬN ({matchNotifs.length})</div>
+    {/* Match notifications */}
+    {matchNotifs&&matchNotifs.length>0&&<div style={{marginBottom:12}}>
       {matchNotifs.map(n=>{
         const readyCount=(n.ready||[]).length;
         const allReady=readyCount>=4;
-        const elapsed2=Math.floor((Date.now()-n.assignedAt)/1000);
-        const remaining=Math.max(0,300-elapsed2);
-        const mm=String(Math.floor(remaining/60)).padStart(2,"0"),ss=String(remaining%60).padStart(2,"0");
-        return <div key={n.id} style={{background:"rgba(245,158,11,0.06)",border:`1px solid ${allReady?"rgba(0,255,178,0.4)":"rgba(245,158,11,0.3)"}`,borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+        const el2=Math.floor((Date.now()-n.assignedAt)/1000);
+        const rem=Math.max(0,300-el2);
+        const mm=String(Math.floor(rem/60)).padStart(2,"0"),ss=String(rem%60).padStart(2,"0");
+        return <div key={n.id} style={{background:allReady?"rgba(0,255,178,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${allReady?"rgba(0,255,178,0.4)":"rgba(245,158,11,0.3)"}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:12}}>
           <div style={{flex:1}}>
             <div style={{fontSize:12,fontWeight:800,color:allReady?"#00FFB2":"#F59E0B"}}>⚔️ {n.courtName} — {[...(n.match?.team1||[]),...(n.match?.team2||[])].filter(Boolean).map(p=>safe(p.name).split(" ").pop()).join(" · ")}</div>
-            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>✅ {readyCount}/4 sẵn sàng · {mm}:{ss} còn lại {allReady?"· Đủ người!":""}</div>
+            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>✅ {readyCount}/4 sẵn sàng · {mm}:{ss} {allReady?"· Đủ người!":""}</div>
           </div>
-          {allReady&&onStartMatch&&<button onClick={()=>onStartMatch(n.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",background:"#00FFB2",color:"#0B0F14",fontWeight:900,cursor:"pointer",fontSize:12,flexShrink:0}}>▶ Bắt đầu</button>}
-          <button onClick={()=>onStartMatch&&onStartMatch(n.id,"dismiss")} title="Tắt" style={{padding:"4px 8px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#6B7280",cursor:"pointer",fontSize:12,flexShrink:0}}>✕</button>
+          {allReady&&onStartMatch&&<button onClick={()=>onStartMatch(n.id)} style={{padding:"8px 14px",borderRadius:9,border:"none",background:"#00FFB2",color:"#0B0F14",fontWeight:900,cursor:"pointer",fontSize:12,flexShrink:0}}>▶ Bắt đầu</button>}
+          <button onClick={()=>onStartMatch&&onStartMatch(n.id,"dismiss")} title="Tắt" style={{padding:"5px 9px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#6B7280",cursor:"pointer",fontSize:12,flexShrink:0}}>✕</button>
         </div>;
       })}
     </div>}
 
-    {/* Courts grid */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginBottom:12}}>
-      {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}
-    </div>
-
-    {/* Recent results */}
-    {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,margin:"4px 0 7px"}}>📋 KẾT QUẢ GẦN ĐÂY</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
-        {history.filter(h=>h.eventId===activeEvent?.id).slice(0,4).map(h=><HCard key={h.id} h={h}/>)}
+    {/* 2-COLUMN: Left=Queue+Actions, Right=Courts */}
+    <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:12,alignItems:"start"}}>
+      {/* LEFT */}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:14}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚡ Hàng chờ</div>
+            {queue.length>0&&<span style={{fontSize:12,fontWeight:700,color:"#f59e0b",background:"#f59e0b18",padding:"3px 10px",borderRadius:20,border:"1px solid #f59e0b44"}}>{queue.length} trận</span>}
+          </div>
+          {!queue.length
+            ? <div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"20px 0"}}><div style={{fontSize:32,marginBottom:6}}>🏓</div><div>Hàng chờ trống</div></div>
+            : <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:260,overflowY:"auto"}}>
+                {queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign}/>)}
+              </div>
+          }
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <button onClick={genQ} style={{border:`1px solid ${G.border}`,borderRadius:11,fontWeight:800,cursor:"pointer",fontSize:13,padding:"13px 8px",background:G.card,color:G.text,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>🎲 Tạo trận</button>
+          <button onClick={onCustom} style={{border:`1px solid ${G.purple}55`,borderRadius:11,fontWeight:800,cursor:"pointer",fontSize:13,padding:"13px 8px",background:G.purple+"22",color:G.purple,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>✏️ Custom</button>
+          <button onClick={autoAss} style={{gridColumn:"span 2",border:"none",borderRadius:11,fontWeight:900,cursor:"pointer",fontSize:14,padding:"14px 8px",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#fff",boxShadow:`0 4px 20px ${G.accent}55`,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>▶ Auto Gán Sân</button>
+        </div>
       </div>
-    </>}
+      {/* RIGHT */}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
+          {courts.map((c,i)=><CourtCard key={c.id} court={c} elapsed={elapsed[c.id]||0} next={next} onScore={onScore} onAssign={onAssign} courtIdx={i} gameMode={activeEvent?.gameMode||"normal"}/>)}
+        </div>
+        {history.filter(h=>h.eventId===activeEvent?.id).length>0&&<>
+          <div style={{fontSize:9,color:G.muted,fontWeight:700,letterSpacing:2,marginTop:2}}>📋 KẾT QUẢ GẦN ĐÂY</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
+            {history.filter(h=>h.eventId===activeEvent?.id).slice(0,4).map(h=><HCard key={h.id} h={h}/>)}
+          </div>
+        </>}
+      </div>
+    </div>
   </div>;
 }
 
@@ -2606,31 +2628,67 @@ function PlayersTab({players,playIds,history,onToggle,onAdd,onCouple,onQR,onEdit
   </div>;
 }
 
-function QueueTab({queue,setQueue,courts,available,history,elapsed,onScore,onAssign,genQ,autoAss,onCustom}){
+function QueueTab({queue,setQueue,courts,available,history,elapsed,onScore,onAssign,genQ,autoAss,onCustom,activeEvent}){
   const playIds=new Set(courts.flatMap(c=>c.match?[...(c.match.team1||[]),...(c.match.team2||[])].filter(Boolean).map(p=>p.id):[]));
+  const gamesInEvent=(pid)=>history.filter(h=>h.eventId===activeEvent?.id&&[...(h.team1||[]),...(h.team2||[])].some(p=>(p?.id||p)===pid)).length;
+  const waitMins=(p)=>p.checkedInAt?Math.floor((Date.now()-p.checkedInAt)/60000):null;
+  const TIER_MAP={"1.0":"Mới","1.5":"Mới","2.0":"Cơ bản","2.5":"Cơ bản","3.0":"Trung bình","3.5":"Trung bình","4.0":"Nâng cao","4.5":"Nâng cao","5.0":"Chuyên","5.5":"Pro"};
+  const TIER_CLR={"Mới":"#9ca3af","Cơ bản":"#60a5fa","Trung bình":"#34d399","Nâng cao":"#f59e0b","Chuyên":"#f87171","Pro":"#e879f9"};
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
-      <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚔️ Queue & Live</div>
-      <div style={{display:"flex",gap:6}}>
-        <button onClick={onCustom} style={{...bS,color:G.purple,border:`1px solid ${G.purple}44`}}>✏️ Custom</button>
-        <button onClick={genQ} style={bS}>🎲 Tạo trận</button>
-        <button onClick={autoAss} style={bP}>▶ Auto gán</button>
+      <div style={{fontSize:14,fontWeight:800,color:G.text}}>⚔️ Hàng chờ & Live</div>
+      <div style={{display:"flex",gap:7}}>
+        <button onClick={genQ} style={{border:`1px solid ${G.border}`,borderRadius:10,fontWeight:800,cursor:"pointer",fontSize:12,padding:"9px 14px",background:G.card,color:G.text}}>🎲 Tạo trận</button>
+        <button onClick={onCustom} style={{border:`1px solid ${G.purple}55`,borderRadius:10,fontWeight:800,cursor:"pointer",fontSize:12,padding:"9px 14px",background:G.purple+"22",color:G.purple}}>✏️ Custom</button>
+        <button onClick={autoAss} style={{border:"none",borderRadius:10,fontWeight:900,cursor:"pointer",fontSize:13,padding:"10px 20px",background:`linear-gradient(135deg,${G.accent},${G.blue})`,color:"#fff",boxShadow:`0 3px 14px ${G.accent}55`}}>▶ Auto gán</button>
       </div>
     </div>
-    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:11,marginBottom:11}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:7}}>⏳ CHỜ ({available.length})</div>
-      {!available.length?<div style={{color:G.dim,fontSize:11}}>Tất cả đang đấu</div>:
-      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {available.sort((a,b)=>(a.gamesPlayed||0)-(b.gamesPlayed||0)).map(p=>(
-          <div key={p.id} style={{padding:"4px 9px",borderRadius:7,background:G.card,border:`1px solid ${(p.gamesPlayed||0)===0?G.gold+"66":G.border}`,display:"flex",alignItems:"center",gap:5}}>
-            {(p.gamesPlayed||0)===0&&<span style={{fontSize:9,color:G.gold}}>🆕</span>}
-            <span style={{fontSize:11,fontWeight:700,color:G.text}}>{safe(p.name)}</span><SBadge skill={p.skill}/><GBadge gender={p.gender}/>
-          </div>
-        ))}
-      </div>}
+    <div style={{background:G.panel,border:`1px solid ${G.border}`,borderRadius:16,padding:14,marginBottom:11}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:800,color:G.text}}>⏳ Đang chờ</div>
+        <span style={{fontSize:12,fontWeight:700,color:G.purple,background:G.purple+"22",padding:"2px 9px",borderRadius:20,border:`1px solid ${G.purple}44`}}>{available.length} người</span>
+      </div>
+      {!available.length
+        ?<div style={{color:G.dim,fontSize:12,textAlign:"center",padding:"16px 0"}}><div style={{fontSize:28,marginBottom:4}}>✅</div>Tất cả đang đấu</div>
+        :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
+          {available.sort((a,b)=>(gamesInEvent(a.id)||0)-(gamesInEvent(b.id)||0)||(waitMins(b)||0)-(waitMins(a)||0)).map(p=>{
+            const evG=gamesInEvent(p.id);
+            const wm=waitMins(p);
+            const tier=TIER_MAP[p.skill]||p.skill||"?";
+            const tc=TIER_CLR[tier]||G.muted;
+            const sp=p.sepc||0;
+            return <div key={p.id} style={{background:G.card,borderRadius:12,padding:"12px",border:`1px solid ${evG===0?G.gold+"66":tc+"33"}`,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:tc}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,marginTop:2}}>
+                <PlayerAvatar name={p.name} size={28} color={p.avatarColor}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:800,color:G.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{safe(p.name)}</div>
+                  <div style={{fontSize:9,color:tc,fontWeight:700}}>{tier} · {p.skill||"?"}</div>
+                </div>
+                <GBadge gender={p.gender}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
+                <div style={{textAlign:"center",background:G.panel,borderRadius:7,padding:"6px 4px"}}>
+                  <div style={{fontSize:18,fontWeight:900,color:evG===0?G.gold:G.accent,lineHeight:1}}>{evG}</div>
+                  <div style={{fontSize:8,color:G.dim,marginTop:2}}>Trận</div>
+                </div>
+                <div style={{textAlign:"center",background:G.panel,borderRadius:7,padding:"6px 4px"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:wm!==null?(wm>30?G.red:wm>15?G.gold:G.muted):G.dim,lineHeight:1}}>{wm!==null?wm+"'":"--"}</div>
+                  <div style={{fontSize:8,color:G.dim,marginTop:2}}>Chờ</div>
+                </div>
+                <div style={{textAlign:"center",background:G.panel,borderRadius:7,padding:"6px 4px"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:sp>0?G.gold:sp<0?G.red:G.muted,lineHeight:1}}>{sp>0?"+":""}{sp}</div>
+                  <div style={{fontSize:8,color:G.dim,marginTop:2}}>Hệ số</div>
+                </div>
+              </div>
+              {evG===0&&<div style={{fontSize:9,color:G.gold,fontWeight:700,textAlign:"center",marginTop:6}}>🆕 Chưa đấu hôm nay</div>}
+            </div>;
+          })}
+        </div>
+      }
     </div>
     {queue.length>0&&<div style={{marginBottom:11}}>
-      <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 QUEUE ({queue.length})</div>
+      <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>📋 Hàng chờ ({queue.length})</div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={onAssign} onRemove={()=>setQueue(p=>p.filter((_,j)=>j!==i))}/>)}</div>
     </div>}
     <div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>🔴 ĐANG ĐẤU</div>
@@ -3923,7 +3981,7 @@ function App(){
         {queue.length>0&&<><div style={{fontSize:9,color:G.muted,fontWeight:700,marginBottom:6}}>⚔️ HÀNG CHỜ ({queue.length})</div><div style={{display:"flex",flexDirection:"column",gap:5}}>{queue.map((q,i)=><QRow key={i} q={q} idx={i} courts={courts} onAssign={assign}/>)}</div></>}
       </div>}
       {tab==="players"    &&<PlayersTab players={players} playIds={playIds} history={history} onToggle={toggleCI} onAdd={()=>setModal("qr")} onCouple={()=>setModal("couple")} onQR={()=>setModal("qr")} onEdit={setEditingPlayer} onResetAll={()=>{if(!confirm("Reset ELO + Sepc TẤT CẢ về mùa mới?"))return;setPlayers(p=>p.map(x=>({...x,elo:SKILL_ELO[x.skill]||1200,baseElo:SKILL_ELO[x.skill]||1200,sepc:0,gamesPlayed:0,wins:0,lastPartners:[]})));showT("🔄 Reset tất cả xong!","warn");}}/>}
-      {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")}/>}
+      {tab==="queue"      &&<QueueTab queue={queue} setQueue={setQueue} courts={courts} available={available} history={history} elapsed={elapsed} onScore={id=>setScoreTarget(id)} onAssign={assign} genQ={genQueue} autoAss={autoAssign} onCustom={()=>setModal("custom")} activeEvent={activeEvent}/>}
       {tab==="leaderboard"&&<LeaderView ranked={[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k)} history={history} />}
       {tab==="history"    &&<HistoryTab history={history} events={events} players={players} activeEventId={activeEventId} onEditEvent={editEvent}/>}
       {tab==="analytics"  &&<AnalyticsView players={players} history={history} courts={courts}/>}

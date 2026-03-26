@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import {
-  G, iS, bP, bS, ROLES, DTYPE_OPT, SKILL_LEVELS, safe, sepc, uid, rng,
-  skillElo, genCode, teamElo, validScore, getWinner
-} from '../../../shared/theme';
-import { Chip, RBadge, CBadge } from '../../../shared/components/Badge';
-import { Toast } from '../../../shared/components/Modal';
-import { CourtCard } from '../../../shared/components/CourtCard';
-import { ScoreModal } from '../../../shared/components/Modal';
-import Login from './Login';
-import { EventModal, QRModal, CustomModal, CoupleModal, AdminModal, ViewerChallengeModal } from './Modals';
-import { DashTab, PlayersTab, QueueTab, LeaderView, AnalyticsView, PlayerProfileModal } from './Tabs';
-import { HistoryTab, KioskTab, TVMode } from './MoreTabs';
+  G, iS, bP, bS, ROLES, DTYPE_OPT, safe, sepc, uid, rng,
+  skillElo, genCode, teamElo
+} from '../../shared/theme';
+import { Chip, RBadge } from '../../shared/components/Badge';
+import { Toast } from '../../shared/components/Modal';
+import { CourtCard } from '../../shared/components/CourtCard';
+import { ScoreModal } from '../../shared/components/Modal';
+import Login from './components/Login';
+import { EventModal, QRModal, CustomModal, CoupleModal, AdminModal, ViewerChallengeModal } from './components/Modals';
+import { DashTab, PlayersTab, QueueTab, LeaderView, AnalyticsView, PlayerProfileModal } from './components/Tabs';
+import { HistoryTab, KioskTab, TVMode } from './components/MoreTabs';
 
 // ─ Seed data
 const MN=["Minh Tuấn","Quốc Huy","Bảo Long","Đức Thịnh","Hoàng Nam","Văn Khoa","Trọng Nghĩa","Anh Kiệt","Đình Phước","Thanh Bình","Hải Đăng","Duy Khang","Tiến Đạt","Mạnh Hùng","Phúc An"];
 const FN=["Linh Chi","Thu Hà","Lan Anh","Mai Linh","Thảo Vy","Ngọc Bích","Phương Anh","Mỹ Hạnh","Thanh Vân","Kim Ngân","Yến Nhi","Hồng Nhung","Bảo Châu"];
-function buildSeed(dbPlayers: any[]|null) {
-  if(dbPlayers?.length>0) return dbPlayers.map(p=>({...p,checkedIn:false}));
+function buildSeed(dbPlayers: any[]|null): any[] {
+  if(dbPlayers && dbPlayers.length>0) return dbPlayers.map((p:any)=>({...p,checkedIn:false}));
   let mi=0,fi=0;
   const mk=(g:string,sk:string,ci:boolean,dt:string)=>({id:uid(),name:g==='M'?MN[mi++]:FN[fi++],gender:g,skill:sk,elo:skillElo(sk),checkedIn:ci,dtype:dt,gamesPlayed:rng(0,14),wins:0,lastPartners:[],coupleId:null,coupleType:null,createdAt:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),viewerCode:genCode()});
   return [mk('M','3.5+',true,'any'),mk('M','3.5+',true,'mixed'),mk('M','3.5',true,'any'),mk('F','3.5',true,'mixed'),mk('M','3.5',true,'male'),mk('F','3.5',true,'female'),mk('M','3.5',true,'mixed'),mk('F','3.5',false,'any'),mk('M','3.5',true,'any'),mk('F','3.0',true,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'male'),mk('F','3.0',false,'mixed'),mk('M','3.0',true,'any'),mk('F','3.0',true,'female'),mk('M','3.0',false,'any'),mk('F','3.0',true,'any'),mk('M','3.0',true,'mixed'),mk('M','2.5',true,'mixed'),mk('F','2.5',true,'any'),mk('M','2.5',true,'any'),mk('F','2.5',true,'mixed'),mk('M','2.5',false,'male'),mk('F','2.5',true,'any')].map(p=>({...p,wins:Math.round((p.gamesPlayed as number)*rng(35,65)/100)}));
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
   const [accounts,setAccounts]=useState(defaultAccounts);
   const [players,setPlayers]=useState(()=>buildSeed(null));
   const [history,setHistory]=useState<any[]>([]);
-  const [courts,setCourts]=useState(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
+  const [courts,setCourts]=useState<any[]>(()=>Array.from({length:NCOURTS},(_,i)=>({id:`c${i+1}`,name:`Sân ${i+1}`,match:null,startedAt:null})));
   const [queue,setQueue]=useState<any[]>([]);
   const [pendingChallenges,setPendingChallenges]=useState<any[]>([]);
   const [events,setEvents]=useState<any[]>([]);
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
   const [elapsed,setElapsed]=useState<Record<string,number>>({});
   const [profileTarget,setProfileTarget]=useState<string|null>(null);
   // AI Matchmaker state
-  const [socket,setSocket]=useState<Socket|null>(null);
+  const [socket,setSocket]=useState<any>(null);
   const [proposal,setProposal]=useState<any>(null);
   const tickRef=useRef<any>();
 
