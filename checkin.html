@@ -142,14 +142,30 @@ function App(){
       const ex=all.find(p=>safe(p.name).toLowerCase()===form.name.trim().toLowerCase());
       if(ex?.checkedIn){setResult(ex);setStep("already");setBusy(false);return;}
       const now=new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"});
+      const vCode = ex?.viewerCode || String(Math.floor(100000 + Math.random() * 900000));
       const pInfo = { method: processType, time: Date.now(), bill: form.billBase64||null };
-      const newP=ex?{...ex,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true, paid:ex.paid||false, paymentInfo:pInfo}
-        :{id:uid(),name:form.name.trim(),gender:form.gender,skill:form.skill,dtype:form.dtype,
+      const newP=ex?{...ex,viewerCode:vCode,gender:form.gender,skill:form.skill,dtype:form.dtype,checkedIn:true, paid:ex.paid||false, paymentInfo:pInfo}
+        :{id:uid(),viewerCode:vCode,name:form.name.trim(),gender:form.gender,skill:form.skill,dtype:form.dtype,
           elo:sElo(form.skill),baseElo:sElo(form.skill),checkedIn:true,gamesPlayed:0,wins:0,
           lastPartners:[],coupleId:null,coupleType:null,phone:"",note:"",createdAt:now,sepc:0,
           paid:false, paymentInfo:pInfo};
       const upd=ex?all.map(p=>p.id===ex.id?newP:p):[...all,newP];
-      const ok=await window.FB.save({...fresh,players:upd});
+      
+      let updAlerts = fresh?.paymentAlerts || [];
+      if (!newP.paid) {
+        // Remove existing pending alerts for this player to prevent spam
+        updAlerts = updAlerts.filter(a => a.playerId !== newP.id || a.status !== 'pending');
+        updAlerts.push({
+          id: `pa_${uid()}`,
+          playerId: newP.id,
+          playerName: newP.name,
+          method: processType, // "upload", "qr_auto", "cash"
+          time: Date.now(),
+          billBase64: form.billBase64 || null,
+          status: 'pending'
+        });
+      }
+      const ok=await window.FB.save({...fresh,players:upd,paymentAlerts:updAlerts});
       if(ok){setResult({...newP,isNew:!ex});setDb(d=>({...d,players:upd}));setStep("success");}
       else setErr("Lỗi lưu dữ liệu. Thử lại!");
     }catch(e){console.error(e);setErr("Lỗi: "+e.message);}
@@ -181,9 +197,15 @@ function App(){
         <div style={{width:70,height:70,borderRadius:22,background:`linear-gradient(135deg,${G.accent},${G.blue})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 14px",boxShadow:`0 8px 32px ${G.accent}50`}}>🏓</div>
         <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1}}>CHECK IN</div>
       {activeEvent
-        ?<div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:7,padding:"5px 16px",borderRadius:20,background:G.accent+"18",border:`1px solid ${G.accent}44`}}>
-          <span style={{width:7,height:7,borderRadius:"50%",background:G.accent,display:"inline-block",boxShadow:`0 0 6px ${G.accent}`}}/>
-          <span style={{fontSize:13,color:G.accent,fontWeight:700}}>{activeEvent.name}</span>
+        ?<div style={{marginTop:8,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 16px",borderRadius:20,background:G.accent+"18",border:`1px solid ${G.accent}44`}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:G.accent,display:"inline-block",boxShadow:`0 0 6px ${G.accent}`,animation:"pulse-neon 1.5s infinite"}}/>
+            <span style={{fontSize:14,color:G.accent,fontWeight:800}}>{activeEvent.name}</span>
+          </div>
+          <div style={{fontSize:11,color:G.muted,fontWeight:600}}>
+            {activeEvent.gameMode==="king"?"👑 King of the Court":activeEvent.gameMode==="ladder"?"📈 Ladder (Lên/Xuống hạng)":"⚔️ Chia Đội Đấu Chéo"} · 
+            Phí: {activeEvent.feePerPerson?activeEvent.feePerPerson.toLocaleString("vi-VN")+"đ":"Miễn phí"}
+          </div>
          </div>
         :<div style={{fontSize:12,color:G.muted,marginTop:8}}>Chưa có event nào đang chạy</div>}
       {activeEvent&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>

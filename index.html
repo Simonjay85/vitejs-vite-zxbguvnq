@@ -663,6 +663,18 @@ function Login({accounts,players,onLogin,loading}){
     }
     setChecking(false);
   };
+
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const lc = qs.get("login");
+    if(lc && !checking) {
+      setMode("viewer");
+      setCode(lc);
+      tryViewer(lc);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   return <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backgroundImage:"radial-gradient(ellipse at 50% 0%, rgba(0,255,178,0.06) 0%, transparent 70%)"}}>
     <div style={{width:400,maxWidth:"100%"}}>
       <div style={{textAlign:"center",marginBottom:40}}>
@@ -1804,10 +1816,11 @@ function ViewerChallengeModal({me,players,courts,onChallenge,onClose}){
 }
 
 
-function ViewerMode({players,courts,history,queue,pendingChallenges,scoreConfirmations,onDispute,onChallenge,elapsed,events,activeEventId,onLogout,me,onShowProfile,matchNotifs,onReadyChange}){
+function ViewerMode({players,courts,history,queue,pendingChallenges,scoreConfirmations,onDispute,onChallenge,elapsed,events,activeEventId,onLogout,me,onShowProfile,matchNotifs,onReadyChange,paymentAlerts,onPaySubmit}){
   const [disputeTarget, setDisputeTarget] = useState(null);
   const [vtab,setVtab]=useState("courts");
   const [showChal,setShowChal]=useState(false);
+  const [showPay, setShowPay] = useState(false);
   const ranked=[...players].filter(p=>p?.name).map(p=>({...p,k:sepc(p,history)})).sort((a,b)=>b.k-a.k);
   const myPlayer = players.find(p=>p.id===me?.id)||me;
   const isGuest = myPlayer?.id?.startsWith("v_");
@@ -1932,8 +1945,21 @@ function ViewerMode({players,courts,history,queue,pendingChallenges,scoreConfirm
             <div style={{fontSize:22,fontWeight:900,color:"#fff"}}>{myEventMatches!=null?myEventMatches:(myPlayer?.gamesPlayed||0)}</div>
           </div>
         </div>
+
+        {/* PAYMENT SELF-SERVICE BANNER */}
+        {myPlayer && !myPlayer.paid && myPlayer.checkedIn && (
+           <div style={{marginTop:16, padding:14, borderRadius:16, background:"rgba(0,0,0,0.25)", border:"1px solid rgba(245,158,11,0.4)"}}>
+             <div style={{fontSize:12, color:G.gold, fontWeight:800, marginBottom:8}}>⚠️ Bạn chưa hoàn tất lệ phí sân</div>
+             {paymentAlerts?.some(a => a.playerId===myPlayer.id && a.status==='pending') 
+                ? <div style={{fontSize:11, color:G.accent, fontWeight:700}}>⏳ Đang chờ Host xác nhận thanh toán...</div>
+                : <button onClick={()=>setShowPay(true)} style={{...bP, padding:"8px 14px", fontSize:12, background:`linear-gradient(135deg, ${G.gold}, ${G.red})`}}>💳 Thanh toán ngay</button>
+             }
+           </div>
+        )}
+
       </div>
     </div>}
+    {showPay && <ViewerPaymentModal me={myPlayer} activeEvent={activeEvent} onClose={()=>setShowPay(false)} onSubmitBill={(b)=>{onPaySubmit(b);setShowPay(false);}}/>}
 
     {/* MY RECENT SCORES (not for guests) */}
     {!isGuest&&myHistory.length>0&&<div style={{margin:"10px 16px 0"}}>
@@ -3189,10 +3215,11 @@ function App(){
   const [scoreConfirmations, setScoreConfirmations] = useState([]);
   const [resolveTarget, setResolveTarget] = useState(null);
   const [announcement, setAnnouncement] = useState("");
+  const [paymentAlerts, setPaymentAlerts] = useState([]);
   const tickRef=useRef(), saveRef=useRef(), unsubRef=useRef();
   // Refs để saveAll luôn dùng state mới nhất — tránh stale closure
   const stateRef = useRef({});
-  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts,pendingChallenges,scoreConfirmations,announcement};
+  stateRef.current = {accounts,events,players,history,courts,queue,activeEventId,numCourts,pendingChallenges,scoreConfirmations,announcement,paymentAlerts};
 
   // Persist me vào sessionStorage — sống qua F5, chết khi đóng tab
   const login = (user) => {
@@ -3237,6 +3264,7 @@ function App(){
       queue: st.queue,
       pendingChallenges: st.pendingChallenges || [],
       scoreConfirmations: st.scoreConfirmations || [],
+      paymentAlerts: st.paymentAlerts || [],
     });
     setTimeout(()=>setSaving(false), 500);
   },[]); // không có dependency — dùng stateRef
@@ -3257,6 +3285,7 @@ function App(){
     setQueue(Array.isArray(db.queue) && db.queue[0] !== '_empty' ? db.queue : []);
     setPendingChallenges(Array.isArray(db.pendingChallenges) ? db.pendingChallenges : []);
     setScoreConfirmations(Array.isArray(db.scoreConfirmations) ? db.scoreConfirmations : []);
+    setPaymentAlerts(Array.isArray(db.paymentAlerts) ? db.paymentAlerts : []);
     if(db.announcement !== undefined) setAnnouncement(db.announcement);
     if(Array.isArray(db.courts) && db.courts.length > 0) {
       setCourts(db.courts.map(c=>({
@@ -3551,6 +3580,48 @@ function App(){
     setResolveTarget(null);
   };
 
+  const approvePayment = (alertId, playerId) => {
+    const p = stateRef.current.players.find(x=>x.id===playerId);
+    if(p) {
+      const updP = stateRef.current.players.map(x=>x.id===playerId?{...x, paid:true}:x);
+      setPlayers(updP);
+      stateRef.current.players = updP;
+    }
+    const newAlerts = stateRef.current.paymentAlerts.filter(a=>a.id!==alertId);
+    setPaymentAlerts(newAlerts);
+    stateRef.current.paymentAlerts = newAlerts;
+    window._lastSavedAt = Date.now();
+    STORE.save({...stateRef.current, paymentAlerts: newAlerts, players: serializePlayers(stateRef.current.players)});
+    showT("Đã xác nhận thanh toán ✅");
+  };
+
+  const rejectPayment = (alertId) => {
+    const newAlerts = stateRef.current.paymentAlerts.filter(a=>a.id!==alertId);
+    setPaymentAlerts(newAlerts);
+    stateRef.current.paymentAlerts = newAlerts;
+    window._lastSavedAt = Date.now();
+    STORE.save({...stateRef.current, paymentAlerts: newAlerts});
+    showT("Đã xoá yêu cầu thanh toán");
+  };
+
+  const handlePaySubmit = (bill64) => {
+    const newAlert = {
+      id: `pa_${uid()}`,
+      playerId: me.id,
+      playerName: me.name,
+      method: "upload",
+      time: Date.now(),
+      billBase64: bill64,
+      status: 'pending'
+    };
+    const updAlerts = [...stateRef.current.paymentAlerts.filter(a => a.playerId !== me.id || a.status !== 'pending'), newAlert];
+    setPaymentAlerts(updAlerts);
+    stateRef.current.paymentAlerts = updAlerts;
+    window._lastSavedAt = Date.now();
+    STORE.save({...stateRef.current, paymentAlerts: updAlerts});
+    showT("Đã gửi biên lai cho Host ✅");
+  };
+
   const handleChallenge = ({challenger, partner, opp1, opp2}) => {
     if(!challenger||!partner||!opp1||!opp2) return;
     const challenge = {
@@ -3837,7 +3908,7 @@ function App(){
   if(!me) return <><style>{CSS}</style><Login accounts={accounts} players={players} onLogin={login} loading={false}/></>;
   if(me.role===ROLES.VIEWER) return <><style>{CSS}</style>
     {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
-    <ViewerMode me={me} players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} activeEventId={activeEventId} numCourts={numCourts} onLogout={logout} onChallenge={handleChallenge} pendingChallenges={pendingChallenges} matchNotifs={matchNotifs} onReadyChange={handleReadyChange} onShowProfile={setEditingPlayer} onDispute={handleDispute} scoreConfirmations={scoreConfirmations}/>
+    <ViewerMode me={me} players={players} courts={courts} history={history} queue={queue} elapsed={elapsed} events={events} activeEventId={activeEventId} numCourts={numCourts} onLogout={logout} onChallenge={handleChallenge} pendingChallenges={pendingChallenges} matchNotifs={matchNotifs} onReadyChange={handleReadyChange} onShowProfile={setEditingPlayer} onDispute={handleDispute} scoreConfirmations={scoreConfirmations} paymentAlerts={paymentAlerts} onPaySubmit={handlePaySubmit}/>
     {editingPlayer&&<PlayerSelfEditModal player={editingPlayer} onSave={savePlayer} onClose={()=>setEditingPlayer(null)} toast={showT}/>}
   </>;
 
